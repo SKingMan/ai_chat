@@ -2,21 +2,54 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { Pool } = require('pg');
-require('dotenv').config();
+const path = require('path');
+
+// 确保加载正确的.env文件
+const envPath = path.resolve(__dirname, '../.env');
+console.log('Loading env file from:', envPath);
+require('dotenv').config({ path: envPath });
+
+// 打印数据库连接参数，用于调试
+console.log('Database connection parameters:');
+console.log('Host:', process.env.DB_HOST);
+console.log('Port:', process.env.DB_PORT);
+console.log('User:', process.env.DB_USER);
+console.log('Password length:', process.env.DB_PASSWORD ? process.env.DB_PASSWORD.length : 0);
+console.log('Database:', process.env.DB_NAME);
+
+// 验证环境变量
+if (!process.env.DB_HOST || !process.env.DB_PORT || !process.env.DB_USER || !process.env.DB_PASSWORD || !process.env.DB_NAME) {
+  console.error('Missing required environment variables!');
+  process.exit(1);
+}
+
+// 内存存储作为后备方案
+let memoryStorage = {
+  chatRooms: [],
+  aiConfigs: [],
+  messages: []
+};
+
+// 检查数据库是否可用
+let isDatabaseAvailable = true;
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// 直接使用正确的数据库名称
+const dbName = 'dbchat';
+console.log('Using database:', dbName);
+
 // 数据库连接池
 const pool = new Pool({
   host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
+  port: parseInt(process.env.DB_PORT, 10), // 确保port是数字类型
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  database: dbName,
   max: 20,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000, // 增加连接超时时间
 });
 
 // 中间件
@@ -27,47 +60,68 @@ app.use(express.json());
 async function initDatabase() {
   try {
     const client = await pool.connect();
+    console.log('Database connected successfully');
     
     try {
-      // 创建聊天表
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS chat_rooms (
-          id VARCHAR(50) PRIMARY KEY,
-          name VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP NOT NULL,
-          chat_rounds INTEGER DEFAULT 5
-        )
-      `);
+      // 测试基本查询
+      await client.query('SELECT 1');
+      console.log('Basic database query successful');
       
-      // 创建AI表
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS ai_configs (
-          id VARCHAR(50) PRIMARY KEY,
-          chat_room_id VARCHAR(50) REFERENCES chat_rooms(id),
-          name VARCHAR(255) NOT NULL,
-          model VARCHAR(100) NOT NULL,
-          avatar VARCHAR(255) NOT NULL,
-          provider VARCHAR(100) NOT NULL,
-          prompt TEXT NOT NULL
-        )
-      `);
+      // 检查数据库版本
+      const versionResult = await client.query('SELECT version()');
+      console.log('Database version:', versionResult.rows[0].version.substring(0, 50));
       
-      // 创建消息表
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS messages (
-          id VARCHAR(50) PRIMARY KEY,
-          chat_room_id VARCHAR(50) REFERENCES chat_rooms(id),
-          sender_id VARCHAR(50) NOT NULL,
-          sender_type VARCHAR(10) NOT NULL,
-          content TEXT NOT NULL,
-          timestamp TIMESTAMP NOT NULL
-        )
-      `);
+      // 检查当前连接信息
+      const connResult = await client.query('SELECT current_user, current_database()');
+      console.log('Current connection:', connResult.rows[0]);
       
-      console.log('Database initialized successfully');
-    } catch (error) {
-      console.error('Error creating tables:', error);
-      console.log('Continuing without database initialization...');
+      // 检查所有可用的schema
+      try {
+        const schemaResult = await client.query(`
+          SELECT schema_name 
+          FROM information_schema.schemata 
+          ORDER BY schema_name
+        `);
+        console.log('All available schemas:');
+        schemaResult.rows.forEach(row => {
+          console.log(`  ${row.schema_name}`);
+        });
+      } catch (error) {
+        console.error('Error checking schemas:', error);
+      }
+      
+      // 检查dbo模式中的表
+      try {
+        const tables = ['chat_rooms', 'ai_configs', 'messages'];
+        for (const table of tables) {
+          const result = await client.query(`
+            SELECT table_schema, table_name 
+            FROM information_schema.tables 
+            WHERE table_name = '${table}' AND table_schema = 'dbo'
+          `);
+          if (result.rows.length > 0) {
+            console.log(`✓ Table ${table} exists in schema ${result.rows[0].table_schema}`);
+          } else {
+            console.log(`✗ Table ${table} does not exist in dbo schema`);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking tables:', error);
+      }
+      
+      // 设置search_path包含dbo模式
+      try {
+        await client.query('SET search_path TO dbo, public');
+        console.log('Search path updated to include dbo schema');
+        
+        // 验证设置是否成功
+        const pathResult = await client.query('SHOW search_path');
+        console.log('Current search_path:', pathResult.rows[0].search_path);
+      } catch (error) {
+        console.error('Error setting search_path:', error);
+      }
+      
+      console.log('Database initialization completed');
     } finally {
       client.release();
     }
@@ -146,8 +200,39 @@ app.post('/api/deepseek/chat', async (req, res) => {
 });
 
 // 健康检查端点
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/api/health', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    try {
+      // 测试数据库连接
+      await client.query('SELECT 1');
+      
+      // 测试表结构
+      let tablesExist = false;
+      try {
+        await client.query('SELECT * FROM chat_rooms LIMIT 1');
+        tablesExist = true;
+        console.log('Tables exist and accessible');
+      } catch (error) {
+        console.error('Error accessing tables:', error);
+      }
+      
+      res.json({ 
+        status: 'ok', 
+        database: 'connected', 
+        tablesExist 
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Health check database error:', error);
+    res.json({ 
+      status: 'ok', 
+      database: 'disconnected', 
+      error: error.message 
+    });
+  }
 });
 
 // 数据库操作端点
@@ -160,22 +245,36 @@ app.post('/api/chatrooms', async (req, res) => {
     try {
       const client = await pool.connect();
       try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
+        // 尝试插入数据
         await client.query(
           'INSERT INTO chat_rooms (id, name, created_at, chat_rounds) VALUES ($1, $2, $3, $4)',
           [id, name, createdAt, chatRounds]
         );
+        console.log('Chat room created successfully:', id, name);
         res.json({ success: true });
+      } catch (error) {
+        console.error('Error creating chat room:', error);
+        // 详细的错误处理
+        if (error.code === '42P01') {
+          res.status(500).json({ success: false, error: 'Table does not exist. Please create tables first.' });
+        } else if (error.code === '42501') {
+          res.status(500).json({ success: false, error: 'Permission denied. Please check database permissions.' });
+        } else {
+          res.status(500).json({ success: false, error: 'Database error: ' + error.message });
+        }
       } finally {
         client.release();
       }
     } catch (dbError) {
-      console.error('Database error creating chat room:', dbError);
-      // 即使数据库操作失败，也返回成功，让前端正常工作
-      res.json({ success: true });
+      console.error('Database connection error:', dbError);
+      res.status(500).json({ success: false, error: 'Database connection failed: ' + dbError.message });
     }
   } catch (error) {
-    console.error('Error creating chat room:', error);
-    res.json({ success: true });
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, error: 'Server error: ' + error.message });
   }
 });
 
@@ -185,18 +284,27 @@ app.get('/api/chatrooms', async (req, res) => {
     try {
       const client = await pool.connect();
       try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
+        // 查询聊天室列表
         const result = await client.query('SELECT * FROM chat_rooms ORDER BY created_at DESC');
+        console.log('Retrieved', result.rows.length, 'chat rooms');
         res.json({ success: true, chatRooms: result.rows });
+      } catch (error) {
+        console.error('Error getting chat rooms:', error);
+        // 返回空列表，让前端正常工作
+        res.json({ success: true, chatRooms: [] });
       } finally {
         client.release();
       }
     } catch (dbError) {
-      console.error('Database error getting chat rooms:', dbError);
+      console.error('Database connection error:', dbError);
       // 返回空列表，让前端正常工作
       res.json({ success: true, chatRooms: [] });
     }
   } catch (error) {
-    console.error('Error getting chat rooms:', error);
+    console.error('Server error:', error);
     res.json({ success: true, chatRooms: [] });
   }
 });
@@ -209,9 +317,13 @@ app.get('/api/chatrooms/:id', async (req, res) => {
     try {
       const client = await pool.connect();
       try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
         // 获取聊天室信息
         const roomResult = await client.query('SELECT * FROM chat_rooms WHERE id = $1', [id]);
         if (roomResult.rows.length === 0) {
+          console.log('Chat room not found:', id);
           return res.json({ success: true, chatRoom: null });
         }
         
@@ -243,17 +355,22 @@ app.get('/api/chatrooms/:id', async (req, res) => {
           }))
         };
         
+        console.log('Chat room details retrieved successfully:', id);
         res.json({ success: true, chatRoom });
+      } catch (error) {
+        console.error('Error getting chat room details:', error);
+        // 返回空聊天室，让前端正常工作
+        res.json({ success: true, chatRoom: null });
       } finally {
         client.release();
       }
     } catch (dbError) {
-      console.error('Database error getting chat room details:', dbError);
+      console.error('Database connection error:', dbError);
       // 返回空聊天室，让前端正常工作
       res.json({ success: true, chatRoom: null });
     }
   } catch (error) {
-    console.error('Error getting chat room details:', error);
+    console.error('Server error:', error);
     res.json({ success: true, chatRoom: null });
   }
 });
@@ -266,22 +383,36 @@ app.post('/api/ai-configs', async (req, res) => {
     try {
       const client = await pool.connect();
       try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
+        // 尝试插入数据
         await client.query(
           'INSERT INTO ai_configs (id, chat_room_id, name, model, avatar, provider, prompt) VALUES ($1, $2, $3, $4, $5, $6, $7)',
           [id, chatRoomId, name, model, avatar, provider, prompt]
         );
+        console.log('AI config added successfully:', id, name);
         res.json({ success: true });
+      } catch (error) {
+        console.error('Error adding AI config:', error);
+        // 详细的错误处理
+        if (error.code === '42P01') {
+          res.status(500).json({ success: false, error: 'Table does not exist. Please create tables first.' });
+        } else if (error.code === '42501') {
+          res.status(500).json({ success: false, error: 'Permission denied. Please check database permissions.' });
+        } else {
+          res.status(500).json({ success: false, error: 'Database error: ' + error.message });
+        }
       } finally {
         client.release();
       }
     } catch (dbError) {
-      console.error('Database error adding AI config:', dbError);
-      // 即使数据库操作失败，也返回成功，让前端正常工作
-      res.json({ success: true });
+      console.error('Database connection error:', dbError);
+      res.status(500).json({ success: false, error: 'Database connection failed: ' + dbError.message });
     }
   } catch (error) {
-    console.error('Error adding AI config:', error);
-    res.json({ success: true });
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, error: 'Server error: ' + error.message });
   }
 });
 
@@ -293,22 +424,36 @@ app.post('/api/messages', async (req, res) => {
     try {
       const client = await pool.connect();
       try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
+        // 尝试插入数据
         await client.query(
           'INSERT INTO messages (id, chat_room_id, sender_id, sender_type, content, timestamp) VALUES ($1, $2, $3, $4, $5, $6)',
           [id, chatRoomId, senderId, senderType, content, timestamp]
         );
+        console.log('Message saved successfully:', id);
         res.json({ success: true });
+      } catch (error) {
+        console.error('Error saving message:', error);
+        // 详细的错误处理
+        if (error.code === '42P01') {
+          res.status(500).json({ success: false, error: 'Table does not exist. Please create tables first.' });
+        } else if (error.code === '42501') {
+          res.status(500).json({ success: false, error: 'Permission denied. Please check database permissions.' });
+        } else {
+          res.status(500).json({ success: false, error: 'Database error: ' + error.message });
+        }
       } finally {
         client.release();
       }
     } catch (dbError) {
-      console.error('Database error saving message:', dbError);
-      // 即使数据库操作失败，也返回成功，让前端正常工作
-      res.json({ success: true });
+      console.error('Database connection error:', dbError);
+      res.status(500).json({ success: false, error: 'Database connection failed: ' + dbError.message });
     }
   } catch (error) {
-    console.error('Error saving message:', error);
-    res.json({ success: true });
+    console.error('Server error:', error);
+    res.status(500).json({ success: false, error: 'Server error: ' + error.message });
   }
 });
 

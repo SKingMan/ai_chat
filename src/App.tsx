@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 // 类型定义
 interface Message {
@@ -39,8 +39,34 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [chatRounds, setChatRounds] = useState(5); // 默认聊天轮数
 
+  // 加载聊天室列表
+  React.useEffect(() => {
+    const loadChatRooms = async () => {
+      try {
+        const response = await fetch('http://localhost:3001/api/chatrooms');
+        const data = await response.json();
+        if (data.success) {
+          // 转换数据格式以匹配前端类型定义
+          const rooms: ChatRoom[] = data.chatRooms.map((room: any) => ({
+            id: room.id,
+            name: room.name,
+            createdAt: room.created_at,
+            chatRounds: room.chat_rounds,
+            ais: [], // 进入聊天室时再加载
+            messages: [] // 进入聊天室时再加载
+          }));
+          setChatRooms(rooms);
+        }
+      } catch (error) {
+        console.error('Error loading chat rooms:', error);
+      }
+    };
+
+    loadChatRooms();
+  }, []);
+
   // 创建新聊天室
-  const createChatRoom = () => {
+  const createChatRoom = async () => {
     if (!newRoomName.trim()) return;
 
     const newRoom: ChatRoom = {
@@ -52,21 +78,70 @@ function App() {
       chatRounds: chatRounds,
     };
 
-    setChatRooms([...chatRooms, newRoom]);
-    setCurrentChatRoom(newRoom);
-    setCurrentPage('chat');
-    setNewRoomName('');
+    try {
+      // 保存到数据库
+      await fetch('http://localhost:3001/api/chatrooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: newRoom.id,
+          name: newRoom.name,
+          createdAt: newRoom.createdAt,
+          chatRounds: newRoom.chatRounds,
+        }),
+      });
+
+      setChatRooms([...chatRooms, newRoom]);
+      setCurrentChatRoom(newRoom);
+      setCurrentPage('chat');
+      setNewRoomName('');
+    } catch (error) {
+      console.error('Error creating chat room:', error);
+      // 即使API调用失败，也允许本地创建聊天室
+      setChatRooms([...chatRooms, newRoom]);
+      setCurrentChatRoom(newRoom);
+      setCurrentPage('chat');
+      setNewRoomName('');
+    }
   };
 
   // 进入现有聊天室
-  const enterChatRoom = (room: ChatRoom) => {
-    setCurrentChatRoom(room);
-    setChatRounds(room.chatRounds);
+  const enterChatRoom = async (room: ChatRoom) => {
+    try {
+      // 从数据库加载聊天室详情
+      const response = await fetch(`http://localhost:3001/api/chatrooms/${room.id}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        // 使用从数据库加载的数据
+        const loadedRoom: ChatRoom = {
+          id: data.chatRoom.id,
+          name: data.chatRoom.name,
+          createdAt: data.chatRoom.createdAt,
+          chatRounds: data.chatRoom.chatRounds,
+          ais: data.chatRoom.ais,
+          messages: data.chatRoom.messages,
+        };
+        setCurrentChatRoom(loadedRoom);
+        setChatRounds(loadedRoom.chatRounds);
+      } else {
+        // 如果加载失败，使用本地数据
+        setCurrentChatRoom(room);
+        setChatRounds(room.chatRounds);
+      }
+    } catch (error) {
+      console.error('Error loading chat room details:', error);
+      // 如果加载失败，使用本地数据
+      setCurrentChatRoom(room);
+      setChatRounds(room.chatRounds);
+    }
     setCurrentPage('chat');
   };
 
   // 添加AI到聊天室
-  const addAI = () => {
+  const addAI = async () => {
     if (!currentChatRoom || !aiName.trim()) return;
 
     const newAI: AIChatConfig = {
@@ -82,6 +157,27 @@ function App() {
       ...currentChatRoom,
       ais: [...currentChatRoom.ais, newAI],
     };
+
+    try {
+      // 保存到数据库
+      await fetch('http://localhost:3001/api/ai-configs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: newAI.id,
+          chatRoomId: currentChatRoom.id,
+          name: newAI.name,
+          model: newAI.model,
+          avatar: newAI.avatar,
+          provider: newAI.provider,
+          prompt: newAI.prompt,
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving AI config:', error);
+    }
 
     setCurrentChatRoom(updatedRoom);
     setChatRooms(chatRooms.map(room => room.id === currentChatRoom.id ? updatedRoom : room));
@@ -150,6 +246,26 @@ function App() {
       timestamp: new Date().toISOString(),
     };
 
+    // 保存用户消息到数据库
+    try {
+      await fetch('http://localhost:3001/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: userMessage.id,
+          chatRoomId: currentChatRoom.id,
+          senderId: userMessage.senderId,
+          senderType: userMessage.senderType,
+          content: userMessage.content,
+          timestamp: userMessage.timestamp,
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving user message:', error);
+    }
+
     const updatedRoomWithUserMessage = {
       ...currentChatRoom,
       messages: [...currentChatRoom.messages, userMessage],
@@ -190,6 +306,26 @@ function App() {
             content: reply,
             timestamp: new Date().toISOString(),
           };
+
+          // 保存AI消息到数据库
+          try {
+            await fetch('http://localhost:3001/api/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                id: aiMessage.id,
+                chatRoomId: currentChatRoom.id,
+                senderId: aiMessage.senderId,
+                senderType: aiMessage.senderType,
+                content: aiMessage.content,
+                timestamp: aiMessage.timestamp,
+              }),
+            });
+          } catch (error) {
+            console.error('Error saving AI message:', error);
+          }
 
           currentMessages = [...currentMessages, aiMessage];
 

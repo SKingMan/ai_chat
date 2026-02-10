@@ -78,6 +78,29 @@ function App() {
       chatRounds: chatRounds,
     };
 
+    // 自动添加预设的AI角色
+    const presetAIs = [
+      {
+        id: (Date.now() + 1).toString(),
+        name: '赛博阿呆',
+        model: 'deepseek-chat',
+        avatar: `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cyberpunk%20tech%20enthusiast%20avatar&image_size=square`,
+        provider: 'DeepSeek',
+        prompt: '你是一个科技畅想者，对未来科技充满了期待，对于未来科技充满了好奇与期待，期望AGI快点到了，你完全不担心科技会对人民有坏的影响，是一个坚定的科技拥护者。',
+      },
+      {
+        id: (Date.now() + 2).toString(),
+        name: '远古小春子',
+        model: 'deepseek-chat',
+        avatar: `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20rural%20person%20avatar&image_size=square`,
+        provider: 'DeepSeek',
+        prompt: '你是一个保守的人，害怕变化，希望一直保持着现在的生活，每天放牛，吃饭，长大结婚，生小孩，孩子依然放牛。你对未来科技始终保持谨慎态度。',
+      },
+    ];
+
+    // 添加预设AI到聊天室
+    newRoom.ais = presetAIs;
+
     try {
       // 保存到数据库
       await fetch('http://localhost:3001/api/chatrooms', {
@@ -92,6 +115,25 @@ function App() {
           chatRounds: newRoom.chatRounds,
         }),
       });
+
+      // 保存预设AI到数据库
+      for (const ai of presetAIs) {
+        await fetch('http://localhost:3001/api/ai-configs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: ai.id,
+            chatRoomId: newRoom.id,
+            name: ai.name,
+            model: ai.model,
+            avatar: ai.avatar,
+            provider: ai.provider,
+            prompt: ai.prompt,
+          }),
+        });
+      }
 
       setChatRooms([...chatRooms, newRoom]);
       setCurrentChatRoom(newRoom);
@@ -188,6 +230,12 @@ function App() {
   // 调用DeepSeek API获取AI回复
   const getAIReply = async (message: string, aiName: string, context?: Message[], aiPrompt?: string) => {
     try {
+      console.log('=== getAIReply Called ===');
+      console.log('Message:', message);
+      console.log('AI Name:', aiName);
+      console.log('AI Prompt:', aiPrompt);
+      console.log('Context length:', context?.length || 0);
+      
       const systemPrompt = `${aiPrompt || `你是${aiName}，一个智能AI助手。`} 回答要简短，10-30字之间。要具有创新精神，会抖机灵，有趣一点，同时保持你的特色。避免重复之前的回答，尝试从不同角度思考问题。`;
       const messages = [
         { role: 'system', content: systemPrompt },
@@ -212,7 +260,9 @@ function App() {
       }
 
       messages.push({ role: 'user', content: message });
+      console.log('Messages to API:', JSON.stringify(messages, null, 2));
 
+      console.log('Making API call to http://localhost:3001/api/deepseek/chat...');
       const response = await fetch('http://localhost:3001/api/deepseek/chat', {
         method: 'POST',
         headers: {
@@ -223,10 +273,23 @@ function App() {
         }),
       });
 
+      console.log('API Response Status:', response.status);
+      console.log('API Response Status Text:', response.statusText);
+      
       const data = await response.json();
-      return data.success ? data.reply : `我是${aiName}，这是一个默认回复。你刚才说：${message}`;
+      console.log('API Response Data:', JSON.stringify(data, null, 2));
+      
+      if (data.success) {
+        console.log('API Call Success, Reply:', data.reply);
+        return data.reply;
+      } else {
+        console.error('API Call Failed, Error:', data.error);
+        return `我是${aiName}，这是一个默认回复。你刚才说：${message}`;
+      }
     } catch (error) {
-      console.error('Error calling AI API:', error);
+      console.error('=== Error in getAIReply ===');
+      console.error('Error message:', (error as Error).message);
+      console.error('Error stack:', (error as Error).stack);
       return `我是${aiName}，这是一个默认回复。你刚才说：${message}`;
     }
   };

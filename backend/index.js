@@ -152,11 +152,20 @@ app.post('/api/ai/reply', async (req, res) => {
 // DeepSeek API 端点
 app.post('/api/deepseek/chat', async (req, res) => {
   try {
+    console.log('=== DeepSeek API Request ===');
+    console.log('Received messages:', JSON.stringify(req.body.messages, null, 2));
+    
     const { messages, model = 'deepseek-chat' } = req.body;
     
     if (!process.env.DEEPSEEK_API_KEY) {
+      console.error('DeepSeek API key is not set');
       return res.status(400).json({ success: false, error: 'DeepSeek API key is not set' });
     }
+    
+    console.log('API Key configured:', process.env.DEEPSEEK_API_KEY ? 'Yes' : 'No');
+    console.log('API Key length:', process.env.DEEPSEEK_API_KEY ? process.env.DEEPSEEK_API_KEY.length : 0);
+    
+    console.log('Making request to DeepSeek API...');
     
     const response = await axios.post(
       'https://api.deepseek.com/v1/chat/completions',
@@ -174,10 +183,16 @@ app.post('/api/deepseek/chat', async (req, res) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
         },
+        timeout: 30000, // 添加超时设置
       }
     );
     
+    console.log('=== DeepSeek API Response ===');
+    console.log('Response status:', response.status);
+    console.log('Full response data:', JSON.stringify(response.data, null, 2));
+    
     let reply = response.data.choices[0].message.content;
+    console.log('Generated reply:', reply);
     
     // 限制回答长度在10-30字之间
     if (reply.length > 30) {
@@ -187,14 +202,25 @@ app.post('/api/deepseek/chat', async (req, res) => {
       if (lastSpaceIndex > 10) {
         reply = reply.substring(0, lastSpaceIndex);
       }
+      console.log('Truncated reply:', reply);
     }
     
     res.json({ success: true, reply });
   } catch (error) {
-    console.error('DeepSeek API Error:', error.response?.data || error.message);
+    console.error('=== DeepSeek API Error ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    if (error.response) {
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', JSON.stringify(error.response.data, null, 2));
+      console.error('Response headers:', JSON.stringify(error.response.headers, null, 2));
+    } else if (error.request) {
+      console.error('Request made but no response received:', error.request);
+    }
+    
     res.status(500).json({ 
       success: false, 
-      error: error.response?.data?.error?.message || 'Internal server error' 
+      error: error.response?.data?.error?.message || error.message || 'Internal server error' 
     });
   }
 });

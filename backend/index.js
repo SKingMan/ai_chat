@@ -2,7 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
 const path = require('path');
+require('dotenv').config();
 
 // 确保加载正确的.env文件
 const envPath = path.resolve(__dirname, '../.env');
@@ -92,7 +94,7 @@ async function initDatabase() {
       
       // 检查dbo模式中的表
       try {
-        const tables = ['chat_rooms', 'ai_configs', 'messages'];
+        const tables = ['chat_rooms', 'ai_configs', 'messages', 'users'];
         for (const table of tables) {
           const result = await client.query(`
             SELECT table_schema, table_name 
@@ -103,6 +105,67 @@ async function initDatabase() {
             console.log(`✓ Table ${table} exists in schema ${result.rows[0].table_schema}`);
           } else {
             console.log(`✗ Table ${table} does not exist in dbo schema`);
+            // 如果表不存在，创建它
+            try {
+              if (table === 'users') {
+                await client.query(`
+                  CREATE TABLE IF NOT EXISTS users (
+                    id VARCHAR(50) PRIMARY KEY,
+                    username VARCHAR(100) NOT NULL UNIQUE,
+                    password VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                  )
+                `);
+                console.log('✓ Created users table');
+              } else if (table === 'chat_rooms') {
+                await client.query(`
+                  CREATE TABLE IF NOT EXISTS chat_rooms (
+                    id VARCHAR(50) PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    chat_rounds INTEGER NOT NULL DEFAULT 5,
+                    tags TEXT
+                  )
+                `);
+                console.log('✓ Created chat_rooms table');
+                // 检查是否缺少 tags 字段，如果缺少则添加
+                try {
+                  await client.query(`ALTER TABLE chat_rooms ADD COLUMN IF NOT EXISTS tags TEXT`);
+                  console.log('✓ Checked/added tags column in chat_rooms table');
+                } catch (error) {
+                  console.error('Error adding tags column:', error);
+                }
+              } else if (table === 'ai_configs') {
+                await client.query(`
+                  CREATE TABLE IF NOT EXISTS ai_configs (
+                    id VARCHAR(50) PRIMARY KEY,
+                    chat_room_id VARCHAR(50) NOT NULL,
+                    name VARCHAR(100) NOT NULL,
+                    model VARCHAR(100) NOT NULL,
+                    avatar TEXT,
+                    provider VARCHAR(100) NOT NULL,
+                    prompt TEXT NOT NULL,
+                    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
+                  )
+                `);
+                console.log('✓ Created ai_configs table');
+              } else if (table === 'messages') {
+                await client.query(`
+                  CREATE TABLE IF NOT EXISTS messages (
+                    id VARCHAR(50) PRIMARY KEY,
+                    chat_room_id VARCHAR(50) NOT NULL,
+                    sender_id VARCHAR(50) NOT NULL,
+                    sender_type VARCHAR(20) NOT NULL,
+                    content TEXT NOT NULL,
+                    timestamp TIMESTAMP NOT NULL,
+                    FOREIGN KEY (chat_room_id) REFERENCES chat_rooms(id) ON DELETE CASCADE
+                  )
+                `);
+                console.log('✓ Created messages table');
+              }
+            } catch (createError) {
+              console.error(`Error creating ${table} table:`, createError);
+            }
           }
         }
       } catch (error) {
@@ -119,6 +182,25 @@ async function initDatabase() {
         console.log('Current search_path:', pathResult.rows[0].search_path);
       } catch (error) {
         console.error('Error setting search_path:', error);
+      }
+      
+      // 检查并添加缺少的字段
+      try {
+        // 检查 chat_rooms 表是否缺少 tags 字段
+        const chatRoomsColumns = await client.query(`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'chat_rooms' AND table_schema = 'dbo'
+        `);
+        const chatRoomsColumnNames = chatRoomsColumns.rows.map(row => row.column_name);
+        if (!chatRoomsColumnNames.includes('tags')) {
+          await client.query(`ALTER TABLE chat_rooms ADD COLUMN tags TEXT`);
+          console.log('✓ Added tags column to chat_rooms table');
+        } else {
+          console.log('✓ tags column already exists in chat_rooms table');
+        }
+      } catch (error) {
+        console.error('Error checking/adding columns:', error);
       }
       
       console.log('Database initialization completed');
@@ -266,7 +348,8 @@ app.get('/api/health', async (req, res) => {
 // 创建聊天室
 app.post('/api/chatrooms', async (req, res) => {
   try {
-    const { id, name, createdAt, chatRounds = 5 } = req.body;
+    const { id, name, createdAt, chatRounds = 5, tags = [] } = req.body;
+    console.log('Creating chat room with tags:', tags);
     
     try {
       const client = await pool.connect();
@@ -276,10 +359,10 @@ app.post('/api/chatrooms', async (req, res) => {
         
         // 尝试插入数据
         await client.query(
-          'INSERT INTO chat_rooms (id, name, created_at, chat_rounds) VALUES ($1, $2, $3, $4)',
-          [id, name, createdAt, chatRounds]
+          'INSERT INTO chat_rooms (id, name, created_at, chat_rounds, tags) VALUES ($1, $2, $3, $4, $5)',
+          [id, name, createdAt, chatRounds, JSON.stringify(tags)]
         );
-        console.log('Chat room created successfully:', id, name);
+        console.log('Chat room created successfully:', id, name, 'with tags:', tags);
         res.json({ success: true });
       } catch (error) {
         console.error('Error creating chat room:', error);
@@ -316,7 +399,24 @@ app.get('/api/chatrooms', async (req, res) => {
         // 查询聊天室列表
         const result = await client.query('SELECT * FROM chat_rooms ORDER BY created_at DESC');
         console.log('Retrieved', result.rows.length, 'chat rooms');
-        res.json({ success: true, chatRooms: result.rows });
+        
+        // 处理tags字段，从JSON字符串解析为数组
+        const chatRoomsWithParsedTags = result.rows.map(room => {
+          try {
+            return {
+              ...room,
+              tags: room.tags ? JSON.parse(room.tags) : []
+            };
+          } catch (error) {
+            console.error('Error parsing tags for room', room.id, error);
+            return {
+              ...room,
+              tags: []
+            };
+          }
+        });
+        
+        res.json({ success: true, chatRooms: chatRoomsWithParsedTags });
       } catch (error) {
         console.error('Error getting chat rooms:', error);
         // 返回空列表，让前端正常工作
@@ -480,6 +580,97 @@ app.post('/api/messages', async (req, res) => {
   } catch (error) {
     console.error('Server error:', error);
     res.status(500).json({ success: false, error: 'Server error: ' + error.message });
+  }
+});
+
+// 用户注册
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: 'Username and password are required' });
+    }
+    
+    try {
+      const client = await pool.connect();
+      try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
+        // 检查用户名是否已存在
+        const existingUser = await client.query('SELECT * FROM users WHERE username = $1', [username]);
+        if (existingUser.rows.length > 0) {
+          return res.status(400).json({ success: false, error: 'Username already exists' });
+        }
+        
+        // 哈希密码
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        
+        // 创建用户
+        const userId = Date.now().toString();
+        await client.query(
+          'INSERT INTO users (id, username, password, created_at) VALUES ($1, $2, $3, $4)',
+          [userId, username, hashedPassword, new Date().toISOString()]
+        );
+        
+        console.log('User registered successfully:', username);
+        res.json({ success: true, userId });
+      } finally {
+        client.release();
+      }
+    } catch (dbError) {
+      console.error('Database error registering user:', dbError);
+      res.status(500).json({ success: false, error: 'Database error' });
+    }
+  } catch (error) {
+    console.error('Error registering user:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// 用户登录
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: 'Username and password are required' });
+    }
+    
+    try {
+      const client = await pool.connect();
+      try {
+        // 确保使用dbo模式
+        await client.query('SET search_path TO dbo, public');
+        
+        // 查找用户
+        const userResult = await client.query('SELECT * FROM users WHERE username = $1', [username]);
+        if (userResult.rows.length === 0) {
+          return res.status(401).json({ success: false, error: 'Invalid username or password' });
+        }
+        
+        const user = userResult.rows[0];
+        
+        // 验证密码
+        const passwordMatch = await bcrypt.compare(password, user.password);
+        if (!passwordMatch) {
+          return res.status(401).json({ success: false, error: 'Invalid username or password' });
+        }
+        
+        console.log('User logged in successfully:', username);
+        res.json({ success: true, userId: user.id, username: user.username });
+      } finally {
+        client.release();
+      }
+    } catch (dbError) {
+      console.error('Database error logging in:', dbError);
+      res.status(500).json({ success: false, error: 'Database error' });
+    }
+  } catch (error) {
+    console.error('Error logging in:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 

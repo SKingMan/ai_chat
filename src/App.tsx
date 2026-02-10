@@ -26,7 +26,362 @@ interface ChatRoom {
   messages: Message[];
   chatRounds: number;
   tags: string[];
+  primaryTag: string; // 一级标签
 }
+
+// 标签数据结构
+interface TagConfig {
+  primaryTag: string;
+  secondaryTags: string[];
+  keywords: string[]; // 用于自动分类的关键词
+}
+
+// 标签配置
+const tagConfig: TagConfig[] = [
+  {
+    primaryTag: '动画',
+    secondaryTags: ['番剧', '动画电影', '短篇动画', '动画音乐', '动画资讯'],
+    keywords: ['动画', '番剧', 'anime', 'cartoon', '二次元', '动漫', '火影', '忍者', '海贼王', '龙珠', '柯南', '进击的巨人', '死神', '银魂', '妖精的尾巴', '全职猎人', '猎人', '家教', '驱魔少年', '钢之炼金术师', 'fate', '圣杯战争', '魔法少女', '美少女战士', '圣斗士星矢', '北斗神拳', '七龙珠', '哆啦a梦', '机器猫', '蜡笔小新', '樱桃小丸子', '名侦探柯南', '犬夜叉', '火影忍者', '海贼王', '进击的巨人', '我的英雄学院', '鬼灭之刃', '咒术回战', '东京复仇者', '堀与宫村', '辉夜大小姐想让我告白', '在下坂本有何贵干', '齐木楠雄的灾难', '灵能百分百', '一拳超人', '银魂', '钢之炼金术师', '死亡笔记', '进击的巨人', '东京食尸鬼', '寄生兽', '甲铁城的卡巴内瑞', 'fate zero', 'fate stay night', '魔法少女小圆', '反叛的鲁鲁修', 'clannad', 'air', 'kanon', 'angel beats', '我的青春恋爱物语果然有问题', '冰菓', '境界的彼方', '中二病也要谈恋爱', '龙与虎', '四月是你的谎言', '未闻花名', '秒速五厘米', '你的名字', '天气之子', '言叶之庭', '声之形', '可塑性记忆', '夏洛特', '樱花庄的宠物女孩', '路人女主的养成方法', '埃罗芒阿老师', '我的妹妹不可能那么可爱', '刀剑神域', '加速世界', '记录的地平线', 'overlord', '关于我转生变成史莱姆这档事', '为美好的世界献上祝福', 're：从零开始的异世界生活', '盾之勇者成名录', '平凡职业造就世界最强', '我的英雄学院', '灵能百分百', '一拳超人', '银魂', '钢之炼金术师', '死亡笔记', '进击的巨人', '东京食尸鬼', '寄生兽', '甲铁城的卡巴内瑞', 'fate zero', 'fate stay night', '魔法少女小圆', '反叛的鲁鲁修', 'clannad', 'air', 'kanon', 'angel beats', '我的青春恋爱物语果然有问题', '冰菓', '境界的彼方', '中二病也要谈恋爱', '龙与虎', '四月是你的谎言', '未闻花名', '秒速五厘米', '你的名字', '天气之子', '言叶之庭', '声之形', '可塑性记忆', '夏洛特', '樱花庄的宠物女孩', '路人女主的养成方法', '埃罗芒阿老师', '我的妹妹不可能那么可爱', '刀剑神域', '加速世界', '记录的地平线', 'overlord', '关于我转生变成史莱姆这档事', '为美好的世界献上祝福', 're：从零开始的异世界生活', '盾之勇者成名录', '平凡职业造就世界最强']
+  },
+  {
+    primaryTag: '影视',
+    secondaryTags: ['电影', '电视剧', '综艺', '纪录片', '短片', '预告片'],
+    keywords: ['电影', '影视', '电视剧', '综艺', 'tv', 'movie', 'film', '复仇者联盟', '漫威', 'dc', '星球大战', '星际穿越', '盗梦空间', '阿凡达', '泰坦尼克号', '肖申克的救赎', '阿甘正传', '楚门的世界', '千与千寻', '龙猫', '魔女宅急便', '天空之城', '哈尔的移动城堡', '幽灵公主', '风之谷', '起风了', '红猪', '悬崖上的金鱼姬', '侧耳倾听', '猫的报恩', '辉夜姬物语', '你的名字', '天气之子', '言叶之庭', '声之形', '秒速五厘米', '未闻花名', '四月是你的谎言', '龙与虎', '我的青春恋爱物语果然有问题', '冰菓', '境界的彼方', '中二病也要谈恋爱', '樱花庄的宠物女孩', '路人女主的养成方法', '埃罗芒阿老师', '我的妹妹不可能那么可爱', '刀剑神域', '加速世界', '记录的地平线', 'overlord', '关于我转生变成史莱姆这档事', '为美好的世界献上祝福', 're：从零开始的异世界生活', '盾之勇者成名录', '平凡职业造就世界最强']
+  },
+  {
+    primaryTag: '游戏',
+    secondaryTags: ['单机游戏', '网络游戏', '手机游戏', '游戏攻略', '游戏资讯'],
+    keywords: ['游戏', 'game', 'gaming', '手游', '端游', '电竞', '王者荣耀', '英雄联盟', 'lol', 'dota', 'csgo', 'cf', '穿越火线', '逆战', '剑灵', '魔兽世界', 'wow', '守望先锋', 'overwatch', '炉石传说', 'hearthstone', '星际争霸', 'starcraft', '暗黑破坏神', 'diablo', '流放之路', 'path of exile', '英雄联盟手游', '王者荣耀', '和平精英', 'pubg', '绝地求生', '刺激战场', '全军出击', '穿越火线手游', 'QQ飞车', '跑跑卡丁车', '梦幻西游', '大话西游', '阴阳师', '决战平安京', '楚留香', '逆水寒', '剑网3', '魔兽世界', '最终幻想', 'ff', '塞尔达传说', 'zelda', '马里奥', 'mario', '索尼克', 'sonic', '口袋妖怪', 'pokemon', '宝可梦', '守望先锋', '英雄联盟', '王者荣耀', '和平精英', '绝地求生', '刺激战场', '全军出击', '穿越火线手游', 'QQ飞车', '跑跑卡丁车', '梦幻西游', '大话西游', '阴阳师', '决战平安京', '楚留香', '逆水寒', '剑网3', '魔兽世界', '最终幻想', '塞尔达传说', '马里奥', '索尼克', '口袋妖怪', '宝可梦']
+  },
+  {
+    primaryTag: '知识',
+    secondaryTags: ['科普', '历史', '地理', '科学', '文化', '哲学'],
+    keywords: ['知识', '科普', '科学', '历史', '文化', '教育']
+  },
+  {
+    primaryTag: '音乐',
+    secondaryTags: ['流行音乐', '古典音乐', '摇滚音乐', '嘻哈音乐', '电子音乐', '民谣'],
+    keywords: ['音乐', '歌曲', 'music', '歌', '旋律', '节奏']
+  },
+  {
+    primaryTag: '舞蹈',
+    secondaryTags: ['街舞', '现代舞', '古典舞', '民族舞', '芭蕾', '舞蹈教学'],
+    keywords: ['舞蹈', '舞', 'dance', '街舞', '芭蕾']
+  },
+  {
+    primaryTag: '科技',
+    secondaryTags: ['前沿科技', '科技资讯', '科技产品', '科技评测', '科技趋势'],
+    keywords: ['科技', 'tech', 'technology', '创新', '未来', '人工智能', 'ai', '智能', '机器人', '机器学习', '深度学习', '神经网络', '算法', '编程', '代码', '开发', '工程师', '软件', '硬件', '计算机', '互联网', '网络', '数据', '大数据', '云计算', '云服务', '服务器', '数据库', '编程', 'coding', 'programming', 'software', 'hardware', 'computer', 'internet', 'network', 'data', 'big data', 'cloud', 'server', 'database']
+  },
+  {
+    primaryTag: '美食',
+    secondaryTags: ['美食制作', '美食评测', '美食探店', '烘焙', '饮品', '素食'],
+    keywords: ['美食', '食物', '吃', 'cooking', 'food', '美食', '餐厅']
+  },
+  {
+    primaryTag: '生活',
+    secondaryTags: ['日常生活', '生活技巧', '生活记录', '生活感悟', '生活方式'],
+    keywords: ['生活', '日常', 'life', 'living', '生活方式']
+  },
+  {
+    primaryTag: '鬼畜',
+    secondaryTags: ['鬼畜调教', '鬼畜音乐', '鬼畜视频', '鬼畜素材', '鬼畜作品'],
+    keywords: ['鬼畜', '恶搞', '搞笑', 'meme']
+  },
+  {
+    primaryTag: '时尚',
+    secondaryTags: ['时尚穿搭', '时尚资讯', '时尚潮流', '时尚品牌', '时尚搭配'],
+    keywords: ['时尚', 'fashion', '穿搭', '潮流', 'style']
+  },
+  {
+    primaryTag: '资讯',
+    secondaryTags: ['新闻资讯', '热点事件', '社会新闻', '国际新闻', '财经资讯'],
+    keywords: ['资讯', '新闻', 'news', '热点', '事件']
+  },
+  {
+    primaryTag: '娱乐',
+    secondaryTags: ['明星', '八卦', '综艺节目', '娱乐资讯', '演唱会'],
+    keywords: ['娱乐', '明星', 'celebrity', 'gossip', '综艺']
+  },
+  {
+    primaryTag: '运动',
+    secondaryTags: ['篮球', '足球', '乒乓球', '羽毛球', '游泳', '跑步', '健身'],
+    keywords: ['运动', 'sports', '篮球', '足球', '健身']
+  },
+  {
+    primaryTag: '汽车',
+    secondaryTags: ['汽车评测', '汽车资讯', '汽车改装', '汽车保养', '新能源汽车'],
+    keywords: ['汽车', 'car', 'auto', 'vehicle', '驾驶']
+  },
+  {
+    primaryTag: '动物',
+    secondaryTags: ['宠物', '野生动物', '动物保护', '萌宠', '动物趣事'],
+    keywords: ['动物', '宠物', 'animal', 'pet', '猫', '狗']
+  },
+  {
+    primaryTag: '手工',
+    secondaryTags: ['手工制作', 'DIY', '手工艺品', '手工教程', '创意手工'],
+    keywords: ['手工', 'diy', '手工制作', 'craft', '手作']
+  },
+  {
+    primaryTag: '搞笑',
+    secondaryTags: ['搞笑视频', '笑话', '幽默', '段子', '搞笑图片', '喜剧'],
+    keywords: ['搞笑', '幽默', 'comedy', 'funny', '笑话', '段子']
+  },
+  {
+    primaryTag: '国创',
+    secondaryTags: ['国产动画', '国产漫画', '国产游戏', '国创资讯', '国创作品'],
+    keywords: ['国创', '国产', '中国', 'china', '国产动画']
+  },
+  {
+    primaryTag: '数码',
+    secondaryTags: ['数码产品', '手机', '电脑', '相机', '数码评测', '数码资讯'],
+    keywords: ['数码', 'digital', '手机', '电脑', '相机']
+  },
+  {
+    primaryTag: '家居',
+    secondaryTags: ['家居装修', '家居设计', '家居用品', '家居收纳', '智能家居'],
+    keywords: ['家居', 'home', '装修', '家具', '家居设计']
+  },
+  {
+    primaryTag: '摄影',
+    secondaryTags: ['摄影技巧', '摄影作品', '风光摄影', '人像摄影', '街拍', '摄影器材'],
+    keywords: ['摄影', 'photography', '拍照', '相机', '摄影作品']
+  },
+  {
+    primaryTag: '旅行',
+    secondaryTags: ['旅行攻略', '旅行记录', '景点推荐', '美食旅行', '旅行装备'],
+    keywords: ['旅行', 'travel', '旅游', '景点', '游记']
+  },
+  {
+    primaryTag: '财经',
+    secondaryTags: ['股票', '基金', '理财', '投资', '财经资讯', '商业'],
+    keywords: ['财经', 'finance', '理财', '投资', '股票', '经济']
+  },
+  {
+    primaryTag: '健身',
+    secondaryTags: ['健身教程', '健身计划', '健身饮食', '减脂', '增肌', '瑜伽'],
+    keywords: ['健身', 'fitness', 'exercise', '瑜伽', '减脂', '增肌']
+  },
+  {
+    primaryTag: '绘画',
+    secondaryTags: ['绘画教程', '绘画作品', '素描', '水彩', '油画', '漫画'],
+    keywords: ['绘画', 'draw', 'painting', 'art', '美术', '画画']
+  },
+  {
+    primaryTag: '母婴',
+    secondaryTags: ['育儿', '婴儿', '幼儿', '母婴用品', '亲子', '早教'],
+    keywords: ['母婴', '育儿', 'baby', 'mother', '亲子', '早教']
+  },
+  {
+    primaryTag: '情感',
+    secondaryTags: ['爱情', '友情', '亲情', '情感故事', '情感咨询', '心理'],
+    keywords: ['情感', '爱情', '友情', '亲情', 'emotion', 'relationship']
+  },
+  {
+    primaryTag: '军事',
+    secondaryTags: ['军事资讯', '武器装备', '军事历史', '军事评论', '国际军情'],
+    keywords: ['军事', 'military', '武器', '战争', '国防']
+  },
+  {
+    primaryTag: '教育',
+    secondaryTags: ['学校教育', '家庭教育', '在线教育', '教育资讯', '学习方法', '考试'],
+    keywords: ['教育', 'education', '学习', '学校', '考试', '教学']
+  }
+];
+
+// 自动分类标签的函数
+const autoCategorizeTags = (roomName: string): { primaryTag: string; secondaryTags: string[] } => {
+  // 转换为小写便于匹配
+  const normalizedName = roomName.toLowerCase();
+  
+  // 匹配一级标签
+  let matchedPrimaryTag = '生活'; // 默认标签
+  let matchedSecondaryTags: string[] = [];
+  let highestMatchScore = 0;
+  
+  // 查找匹配的一级标签
+  for (const config of tagConfig) {
+    let matchScore = 0;
+    for (const keyword of config.keywords) {
+      if (normalizedName.includes(keyword.toLowerCase())) {
+        // 根据关键词长度和位置计算得分
+        // 关键词长度越长，得分越高
+        matchScore += keyword.length * 0.5;
+        // 如果关键词出现在聊天室名称的开头，得分更高
+        if (normalizedName.startsWith(keyword.toLowerCase())) {
+          matchScore += 2;
+        }
+      }
+    }
+    
+    // 如果当前标签的得分高于最高得分，更新匹配结果
+    if (matchScore > highestMatchScore) {
+      highestMatchScore = matchScore;
+      matchedPrimaryTag = config.primaryTag;
+      // 生成相关的二级标签
+      matchedSecondaryTags = config.secondaryTags.slice(0, 3); // 最多取3个二级标签
+    }
+  }
+  
+  return { primaryTag: matchedPrimaryTag, secondaryTags: matchedSecondaryTags };
+}
+
+// 通用标签显示组件
+interface TagButtonProps {
+  tags: string[];
+  maxVisible: number;
+  selectedTag: string | null;
+  onTagSelect: (tag: string) => void;
+  displayStyle?: 'inline' | 'block';
+}
+
+const TagButtonGroup: React.FC<TagButtonProps> = ({ tags, maxVisible, selectedTag, onTagSelect, displayStyle = 'inline' }) => {
+  const [showDropdown, setShowDropdown] = useState(false);
+  
+  const visibleTags = tags.slice(0, maxVisible - 1);
+  const hiddenTags = tags.slice(maxVisible - 1);
+  
+  const handleMoreMouseOver = () => {
+    setShowDropdown(true);
+  };
+  
+  const handleMoreMouseOut = () => {
+    setShowDropdown(false);
+  };
+  
+  const handleDropdownMouseOver = () => {
+    setShowDropdown(true);
+  };
+  
+  const handleDropdownMouseOut = () => {
+    setShowDropdown(false);
+  };
+  
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: displayStyle === 'inline' ? '6px' : '12px', position: 'relative' }}>
+      {visibleTags.map(tag => (
+        <button 
+          key={tag}
+          onClick={() => onTagSelect(tag)}
+          style={{
+            padding: displayStyle === 'inline' ? '2px 8px' : '8px 16px',
+            borderRadius: displayStyle === 'inline' ? '10px' : '16px',
+            border: '1px solid #e1e1e1',
+            backgroundColor: selectedTag === tag ? '#00a1d6' : displayStyle === 'inline' ? '#E3F2FD' : 'white',
+            color: selectedTag === tag ? 'white' : '#00a1d6',
+            fontSize: displayStyle === 'inline' ? '10px' : '14px',
+            fontWeight: selectedTag === tag ? '600' : '400',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            whiteSpace: 'nowrap',
+            textAlign: 'center',
+            flexShrink: 0
+          }}
+          onMouseOver={(e) => {
+            if (selectedTag !== tag) {
+              e.currentTarget.style.backgroundColor = displayStyle === 'inline' ? '#BBDEFB' : '#f5f5f5';
+            }
+          }}
+          onMouseOut={(e) => {
+            if (selectedTag !== tag) {
+              e.currentTarget.style.backgroundColor = displayStyle === 'inline' ? '#E3F2FD' : 'white';
+            }
+          }}
+        >
+          {tag}
+        </button>
+      ))}
+      {hiddenTags.length > 0 && (
+        <div style={{ position: 'relative' }}>
+          <button 
+            style={{
+              padding: displayStyle === 'inline' ? '2px 8px' : '8px 16px',
+              borderRadius: displayStyle === 'inline' ? '10px' : '16px',
+              border: '1px solid #e1e1e1',
+              backgroundColor: displayStyle === 'inline' ? '#E3F2FD' : 'white',
+              color: '#00a1d6',
+              fontSize: displayStyle === 'inline' ? '10px' : '14px',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              whiteSpace: 'nowrap',
+              textAlign: 'center',
+              flexShrink: 0
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = displayStyle === 'inline' ? '#BBDEFB' : '#f5f5f5';
+              handleMoreMouseOver();
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = displayStyle === 'inline' ? '#E3F2FD' : 'white';
+              handleMoreMouseOut();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              setShowDropdown(!showDropdown);
+            }}
+          >
+            更多
+          </button>
+          {showDropdown && (
+            <div 
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                marginTop: '8px',
+                backgroundColor: 'white',
+                border: '1px solid #e1e1e1',
+                borderRadius: '8px',
+                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                minWidth: '120px',
+                zIndex: 1000
+              }}
+              onMouseOver={handleDropdownMouseOver}
+              onMouseOut={handleDropdownMouseOut}
+            >
+              {hiddenTags.map(tag => (
+                <button 
+                  key={tag}
+                  onClick={() => onTagSelect(tag)}
+                  style={{
+                    padding: displayStyle === 'inline' ? '2px 8px' : '6px 12px',
+                    borderRadius: displayStyle === 'inline' ? '10px' : '12px',
+                    border: '1px solid #e1e1e1',
+                    backgroundColor: selectedTag === tag ? '#00a1d6' : displayStyle === 'inline' ? '#E3F2FD' : 'white',
+                    color: selectedTag === tag ? 'white' : '#00a1d6',
+                    fontSize: displayStyle === 'inline' ? '10px' : '13px',
+                    fontWeight: selectedTag === tag ? '600' : '400',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap'
+                  }}
+                  onMouseOver={(e) => {
+                    if (selectedTag !== tag) {
+                      e.currentTarget.style.backgroundColor = displayStyle === 'inline' ? '#BBDEFB' : '#f5f5f5';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (selectedTag !== tag) {
+                      e.currentTarget.style.backgroundColor = displayStyle === 'inline' ? '#E3F2FD' : 'white';
+                    }
+                  }}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 function App() {
   // 状态管理
@@ -39,9 +394,8 @@ function App() {
   const [aiPrompt, setAiPrompt] = useState(''); // AI角色设定提示词
   const [isLoading, setIsLoading] = useState(false);
   const [chatRounds, setChatRounds] = useState(5); // 默认聊天轮数
-  const [newRoomTags, setNewRoomTags] = useState(''); // 新聊天室标签，用逗号分隔
+
   const [selectedTag, setSelectedTag] = useState<string | null>(null); // 当前选中的标签
-  const [allTags, setAllTags] = useState<string[]>([]); // 所有可用标签
   // 用户认证状态
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [username, setUsername] = useState('');
@@ -65,17 +419,11 @@ function App() {
             createdAt: room.created_at,
             chatRounds: room.chat_rounds,
             tags: room.tags ? room.tags : [],
+            primaryTag: room.primary_tag || room.primaryTag || '生活',
             ais: [], // 进入聊天室时再加载
             messages: [] // 进入聊天室时再加载
           }));
           setChatRooms(rooms);
-          
-          // 提取所有标签
-          const tags = new Set<string>();
-          rooms.forEach(room => {
-            room.tags.forEach(tag => tags.add(tag));
-          });
-          setAllTags(Array.from(tags));
         }
       } catch (error) {
         console.error('Error loading chat rooms:', error);
@@ -117,8 +465,8 @@ function App() {
         // 解析标签
         const tags = data.reply
           .split(',')
-          .map(tag => tag.trim())
-          .filter(tag => tag.length > 0)
+          .map((tag: string) => tag.trim())
+          .filter((tag: string) => tag.length > 0)
           .slice(0, 5); // 最多5个标签
         console.log('Generated tags:', tags);
         return tags;
@@ -132,20 +480,27 @@ function App() {
   };
 
   // 创建新聊天室
-  const createChatRoom = async () => {
-    if (!newRoomName.trim()) return;
+  const createChatRoom = async (roomName?: string) => {
+    const nameToUse = roomName || newRoomName;
+    if (!nameToUse.trim()) return;
 
+    // 自动分类标签
+    const { primaryTag, secondaryTags } = autoCategorizeTags(nameToUse);
+    
     // 生成标签
-    const tags = await generateTags(newRoomName);
+    const tags = await generateTags(nameToUse);
+    // 合并自动分类的二级标签和生成的标签
+    const combinedTags = [...new Set([...secondaryTags, ...tags])];
 
     const newRoom: ChatRoom = {
       id: Date.now().toString(),
-      name: newRoomName,
+      name: nameToUse,
       createdAt: new Date().toISOString(),
       ais: [],
       messages: [],
       chatRounds: chatRounds,
-      tags: tags,
+      tags: combinedTags,
+      primaryTag: primaryTag,
     };
 
     // 自动添加预设的AI角色
@@ -184,6 +539,7 @@ function App() {
           createdAt: newRoom.createdAt,
           chatRounds: newRoom.chatRounds,
           tags: newRoom.tags,
+          primaryTag: newRoom.primaryTag,
         }),
       });
 
@@ -249,6 +605,8 @@ function App() {
           name: data.chatRoom.name,
           createdAt: data.chatRoom.createdAt,
           chatRounds: data.chatRoom.chatRounds,
+          tags: data.chatRoom.tags || [],
+          primaryTag: data.chatRoom.primaryTag || '生活',
           ais: data.chatRoom.ais,
           messages: data.chatRoom.messages,
         };
@@ -633,8 +991,8 @@ function App() {
                       // 弹出创建聊天室的对话框或模态框
                       const roomName = prompt('请输入聊天室名称:');
                       if (roomName && roomName.trim()) {
-                        setNewRoomName(roomName.trim());
-                        createChatRoom();
+                        setNewRoomName(roomName.trim()); // 仍然更新状态，保持一致性
+                        createChatRoom(roomName.trim()); // 直接传递参数
                       }
                     }} 
                     style={{
@@ -654,7 +1012,7 @@ function App() {
                       e.currentTarget.style.backgroundColor = '#00a1d6';
                     }}
                   >
-                    创建聊天室
+                    创建
                   </button>
                   <button 
                     onClick={logout} 
@@ -730,66 +1088,186 @@ function App() {
           {/* 标签板块 - 类似B站的标签导航 */}
           <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e1e1e1', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
             <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#333', fontWeight: '600' }}>标签板块</h3>
-            <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '8px', scrollbarWidth: 'thin', scrollbarColor: '#e1e1e1 #f5f5f5' }}>
-              {/* 全部标签 */}
-              <button 
-                onClick={() => setSelectedTag(null)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '16px',
-                  border: '1px solid #e1e1e1',
-                  backgroundColor: selectedTag === null ? '#00a1d6' : 'white',
-                  color: selectedTag === null ? 'white' : '#333',
-                  fontSize: '14px',
-                  fontWeight: selectedTag === null ? '600' : '400',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  whiteSpace: 'nowrap',
-                }}
-                onMouseOver={(e) => {
-                  if (selectedTag !== null) {
-                    e.currentTarget.style.backgroundColor = '#f5f5f5';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (selectedTag !== null) {
-                    e.currentTarget.style.backgroundColor = 'white';
-                  }
-                }}
-              >
-                全部
-              </button>
-              {/* 其他标签 */}
-              {allTags.map(tag => (
+            <div style={{ position: 'relative' }}>
+              {/* 标签容器 - 两行显示 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', maxHeight: '80px' }}>
+                {/* 全部标签 */}
                 <button 
-                  key={tag}
-                  onClick={() => setSelectedTag(tag)}
+                  onClick={() => setSelectedTag(null)}
                   style={{
                     padding: '8px 16px',
                     borderRadius: '16px',
                     border: '1px solid #e1e1e1',
-                    backgroundColor: selectedTag === tag ? '#00a1d6' : 'white',
-                    color: selectedTag === tag ? 'white' : '#333',
+                    backgroundColor: selectedTag === null ? '#00a1d6' : 'white',
+                    color: selectedTag === null ? 'white' : '#333',
                     fontSize: '14px',
-                    fontWeight: selectedTag === tag ? '600' : '400',
+                    fontWeight: selectedTag === null ? '600' : '400',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease',
                     whiteSpace: 'nowrap',
+                    textAlign: 'center',
+                    flexShrink: 0
                   }}
                   onMouseOver={(e) => {
-                    if (selectedTag !== tag) {
+                    if (selectedTag !== null) {
                       e.currentTarget.style.backgroundColor = '#f5f5f5';
                     }
                   }}
                   onMouseOut={(e) => {
-                    if (selectedTag !== tag) {
+                    if (selectedTag !== null) {
                       e.currentTarget.style.backgroundColor = 'white';
                     }
                   }}
                 >
-                  {tag}
+                  全部
                 </button>
-              ))}
+                {/* 一级标签 - 第一行和第二行的标签 */}
+                {tagConfig.slice(0, 28).map(config => (
+                  <button 
+                    key={config.primaryTag}
+                    onClick={() => setSelectedTag(config.primaryTag)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '16px',
+                      border: '1px solid #e1e1e1',
+                      backgroundColor: selectedTag === config.primaryTag ? '#00a1d6' : 'white',
+                      color: selectedTag === config.primaryTag ? 'white' : '#333',
+                      fontSize: '14px',
+                      fontWeight: selectedTag === config.primaryTag ? '600' : '400',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      whiteSpace: 'nowrap',
+                      textAlign: 'center',
+                      flexShrink: 0
+                    }}
+                    onMouseOver={(e) => {
+                      if (selectedTag !== config.primaryTag) {
+                        e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (selectedTag !== config.primaryTag) {
+                        e.currentTarget.style.backgroundColor = 'white';
+                      }
+                    }}
+                  >
+                    {config.primaryTag}
+                  </button>
+                ))}
+                {/* 更多标签 */}
+                {tagConfig.length > 28 && (
+                  <div style={{ position: 'relative' }}>
+                    <button 
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '16px',
+                        border: '1px solid #e1e1e1',
+                        backgroundColor: 'white',
+                        color: '#333',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        whiteSpace: 'nowrap',
+                        textAlign: 'center',
+                        flexShrink: 0
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f5f5f5';
+                        // 显示更多标签的下拉菜单
+                        const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (dropdown) {
+                          dropdown.style.display = 'flex';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = 'white';
+                        // 隐藏更多标签的下拉菜单
+                        const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (dropdown) {
+                          dropdown.style.display = 'none';
+                        }
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        // 点击时也显示下拉菜单
+                        const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
+                        if (dropdown) {
+                          dropdown.style.display = dropdown.style.display === 'flex' ? 'none' : 'flex';
+                        }
+                      }}
+                    >
+                      更多
+                    </button>
+                    {/* 更多标签下拉菜单 */}
+                    <div 
+                      style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        marginTop: '8px',
+                        backgroundColor: 'white',
+                        border: '1px solid #e1e1e1',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+                        padding: '12px',
+                        display: 'none',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        minWidth: '120px',
+                        zIndex: 1000
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.display = 'flex';
+                        // 同时保持更多按钮的悬停状态
+                        const button = e.currentTarget.previousElementSibling as HTMLElement;
+                        if (button) {
+                          button.style.backgroundColor = '#f5f5f5';
+                        }
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        // 同时恢复更多按钮的正常状态
+                        const button = e.currentTarget.previousElementSibling as HTMLElement;
+                        if (button) {
+                          button.style.backgroundColor = 'white';
+                        }
+                      }}
+                    >
+                      {tagConfig.slice(28).map(config => (
+                        <button 
+                          key={config.primaryTag}
+                          onClick={() => setSelectedTag(config.primaryTag)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '12px',
+                            border: '1px solid #e1e1e1',
+                            backgroundColor: selectedTag === config.primaryTag ? '#00a1d6' : 'white',
+                            color: selectedTag === config.primaryTag ? 'white' : '#333',
+                            fontSize: '13px',
+                            fontWeight: selectedTag === config.primaryTag ? '600' : '400',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            textAlign: 'left',
+                            whiteSpace: 'nowrap'
+                          }}
+                          onMouseOver={(e) => {
+                            if (selectedTag !== config.primaryTag) {
+                              e.currentTarget.style.backgroundColor = '#f5f5f5';
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            if (selectedTag !== config.primaryTag) {
+                              e.currentTarget.style.backgroundColor = 'white';
+                            }
+                          }}
+                        >
+                          {config.primaryTag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           
@@ -807,7 +1285,7 @@ function App() {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
                 {chatRooms
-                  .filter(room => selectedTag === null || room.tags.includes(selectedTag))
+                  .filter(room => selectedTag === null || room.primaryTag === selectedTag)
                   .map(room => (
                     <div 
                       key={room.id} 
@@ -834,24 +1312,33 @@ function App() {
                       <div style={{ marginBottom: '12px', fontSize: '12px', color: '#999' }}>
                         <span style={{ marginRight: '12px' }}>{new Date(room.createdAt).toLocaleString()}</span>
                         <span>轮数: {room.chatRounds}</span>
+                        <span style={{ marginLeft: '12px', color: '#00a1d6' }}>分类: {room.primaryTag}</span>
                       </div>
-                      {/* 显示标签 */}
-                      <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                        {room.tags.map(tag => (
-                          <span 
-                            key={tag}
-                            style={{
-                              display: 'inline-block',
-                              padding: '2px 8px',
-                              borderRadius: '10px',
-                              backgroundColor: '#E3F2FD',
-                              color: '#00a1d6',
-                              fontSize: '10px',
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                      {/* 显示一级标签 */}
+                      <div style={{ marginBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        <span 
+                          style={{
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            borderRadius: '10px',
+                            backgroundColor: '#00a1d6',
+                            color: 'white',
+                            fontSize: '10px',
+                            fontWeight: '600'
+                          }}
+                        >
+                          {room.primaryTag}
+                        </span>
+                      </div>
+                      {/* 显示二级标签 */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <TagButtonGroup 
+                          tags={room.tags}
+                          maxVisible={5} // 最多显示5个标签
+                          selectedTag={null}
+                          onTagSelect={() => {}}
+                          displayStyle="inline"
+                        />
                       </div>
                       <button 
                         onClick={(e) => {
@@ -895,7 +1382,27 @@ function App() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
             <h1>{currentChatRoom.name}</h1>
-            <button onClick={goBackHome}>返回主页</button>
+            <button 
+              onClick={goBackHome}
+              style={{
+                backgroundColor: '#00a1d6',
+                color: 'white',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.backgroundColor = '#00b5e5';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = '#00a1d6';
+              }}
+            >
+              返回主页
+            </button>
           </div>
 
           <div style={{ marginBottom: '20px' }}>
@@ -919,7 +1426,27 @@ function App() {
                     style={{ width: '100%', height: '80px' }}
                   />
                 </div>
-                <button onClick={addAI}>添加</button>
+                <button 
+                  onClick={addAI}
+                  style={{
+                    backgroundColor: '#00a1d6',
+                    color: 'white',
+                    border: 'none',
+                    padding: '8px 16px',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.backgroundColor = '#00b5e5';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = '#00a1d6';
+                  }}
+                >
+                  添加
+                </button>
               </>
             ) : (
               <p style={{ color: '#999' }}>请登录后添加AI</p>
@@ -1003,11 +1530,34 @@ function App() {
               placeholder="输入消息..."
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
-              disabled={currentChatRoom.ais.length < 2 || isLoading}
+              disabled={currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated}
+              style={{
+                opacity: currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated ? 0.6 : 1,
+                cursor: currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated ? 'not-allowed' : 'text'
+              }}
             />
             <button 
               onClick={sendMessage} 
-              disabled={currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading}
+              disabled={currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading || !isAuthenticated}
+              style={{
+                backgroundColor: isAuthenticated ? '#00a1d6' : '#999',
+                color: 'white',
+                border: 'none',
+                padding: '10px 20px',
+                borderRadius: '4px',
+                fontSize: '14px',
+                opacity: (currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading) ? 0.6 : 1,
+                cursor: (currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading || !isAuthenticated) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                if (isAuthenticated && !isLoading && currentChatRoom.ais.length >= 2 && messageInput.trim()) {
+                  e.currentTarget.style.backgroundColor = '#00b5e5';
+                }
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.backgroundColor = isAuthenticated ? '#00a1d6' : '#999';
+              }}
             >
               {isLoading ? '发送中...' : '发送'}
             </button>
@@ -1015,6 +1565,11 @@ function App() {
           {currentChatRoom.ais.length < 2 && (
             <p style={{ marginTop: '10px', color: '#999', fontSize: '12px' }}>
               请至少添加两个AI模型才能开始聊天
+            </p>
+          )}
+          {!isAuthenticated && (
+            <p style={{ marginTop: '10px', color: '#999', fontSize: '12px' }}>
+              请登录后才能发送消息
             </p>
           )}
         </div>

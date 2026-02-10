@@ -124,16 +124,19 @@ async function initDatabase() {
                     name VARCHAR(255) NOT NULL,
                     created_at TIMESTAMP NOT NULL,
                     chat_rounds INTEGER NOT NULL DEFAULT 5,
-                    tags TEXT
+                    tags TEXT,
+                    primary_tag TEXT
                   )
                 `);
                 console.log('✓ Created chat_rooms table');
-                // 检查是否缺少 tags 字段，如果缺少则添加
+                // 检查是否缺少字段，如果缺少则添加
                 try {
                   await client.query(`ALTER TABLE chat_rooms ADD COLUMN IF NOT EXISTS tags TEXT`);
                   console.log('✓ Checked/added tags column in chat_rooms table');
+                  await client.query(`ALTER TABLE chat_rooms ADD COLUMN IF NOT EXISTS primary_tag TEXT`);
+                  console.log('✓ Checked/added primary_tag column in chat_rooms table');
                 } catch (error) {
-                  console.error('Error adding tags column:', error);
+                  console.error('Error adding columns:', error);
                 }
               } else if (table === 'ai_configs') {
                 await client.query(`
@@ -186,7 +189,7 @@ async function initDatabase() {
       
       // 检查并添加缺少的字段
       try {
-        // 检查 chat_rooms 表是否缺少 tags 字段
+        // 检查 chat_rooms 表是否缺少字段
         const chatRoomsColumns = await client.query(`
           SELECT column_name 
           FROM information_schema.columns 
@@ -198,6 +201,12 @@ async function initDatabase() {
           console.log('✓ Added tags column to chat_rooms table');
         } else {
           console.log('✓ tags column already exists in chat_rooms table');
+        }
+        if (!chatRoomsColumnNames.includes('primary_tag')) {
+          await client.query(`ALTER TABLE chat_rooms ADD COLUMN primary_tag TEXT`);
+          console.log('✓ Added primary_tag column to chat_rooms table');
+        } else {
+          console.log('✓ primary_tag column already exists in chat_rooms table');
         }
       } catch (error) {
         console.error('Error checking/adding columns:', error);
@@ -348,8 +357,8 @@ app.get('/api/health', async (req, res) => {
 // 创建聊天室
 app.post('/api/chatrooms', async (req, res) => {
   try {
-    const { id, name, createdAt, chatRounds = 5, tags = [] } = req.body;
-    console.log('Creating chat room with tags:', tags);
+    const { id, name, createdAt, chatRounds = 5, tags = [], primaryTag } = req.body;
+    console.log('Creating chat room with tags:', tags, 'primaryTag:', primaryTag);
     
     try {
       const client = await pool.connect();
@@ -359,8 +368,8 @@ app.post('/api/chatrooms', async (req, res) => {
         
         // 尝试插入数据
         await client.query(
-          'INSERT INTO chat_rooms (id, name, created_at, chat_rounds, tags) VALUES ($1, $2, $3, $4, $5)',
-          [id, name, createdAt, chatRounds, JSON.stringify(tags)]
+          'INSERT INTO chat_rooms (id, name, created_at, chat_rounds, tags, primary_tag) VALUES ($1, $2, $3, $4, $5, $6)',
+          [id, name, createdAt, chatRounds, JSON.stringify(tags), primaryTag]
         );
         console.log('Chat room created successfully:', id, name, 'with tags:', tags);
         res.json({ success: true });

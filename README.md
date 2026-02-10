@@ -27,7 +27,7 @@
 1. **克隆项目**
    ```bash
    git clone https://github.com/your-username/ai-chat-room.git
-   cd ai-chat-room
+   cd ai_chat
    ```
 
 2. **安装前端依赖**

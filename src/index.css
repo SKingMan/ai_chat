@@ -141,11 +141,67 @@ li {
 }
 
 /* 响应式设计 */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .container {
     padding: 10px;
   }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0;
+    height: 100vh !important;
+  }
   
+  /* 移动端布局：Agent列表可折叠 */
+  .mobile-agent-list {
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    width: 100%;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  
+  .mobile-agent-list.open {
+    transform: translateX(0);
+  }
+  
+  .agent-toggle {
+    display: block !important;
+    position: fixed;
+    left: 10px;
+    top: 10px;
+    z-index: 1001;
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 8px;
+    cursor: pointer;
+  }
+  
+  /* 聊天区域占满屏幕 */
+  .chat-area {
+    width: 100% !important;
+  }
+  
+  /* 消息样式调整 */
+  .message {
+    margin-bottom: 16px !important;
+  }
+  
+  .message-content {
+    max-width: 80% !important;
+  }
+  
+  .message-avatar {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  
+  /* 输入区域调整 */
   .chat-input {
     flex-direction: column;
   }
@@ -153,9 +209,26 @@ li {
   .chat-input textarea {
     margin-right: 0;
     margin-bottom: 10px;
+    height: 80px !important;
   }
   
   .chat-input button {
     align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 消息样式进一步调整 */
+  .message-content {
+    max-width: 85% !important;
+  }
+  
+  .message-text {
+    font-size: 13px !important;
+  }
+  
+  /* 输入区域调整 */
+  .chat-input textarea {
+    height: 70px !important;
   }
 }

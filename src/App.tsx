@@ -1,4 +1,47 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+// CSS变量定义
+const styles = {
+  // 颜色变量
+  colors: {
+    primary: '#00a1d6',
+    primaryHover: '#00b5e5',
+    secondary: '#333',
+    secondaryLight: '#666',
+    secondaryLighter: '#999',
+    background: '#f5f5f5',
+    white: '#ffffff',
+    border: '#e1e1e1',
+    cardBg: '#ffffff',
+    tagBg: '#E3F2FD',
+    tagColor: '#00a1d6',
+  },
+  // 字体变量
+  fonts: {
+    display: '"Inter", "Helvetica Neue", Arial, sans-serif',
+    body: '"Inter", "Helvetica Neue", Arial, sans-serif',
+  },
+  // 阴影变量
+  shadows: {
+    card: '0 4px 12px rgba(0, 0, 0, 0.08)',
+    hover: '0 8px 24px rgba(0, 0, 0, 0.12)',
+    dropdown: '0 4px 16px rgba(0, 0, 0, 0.1)',
+  },
+  // 圆角变量
+  borderRadius: {
+    small: '4px',
+    medium: '8px',
+    large: '16px',
+    button: '6px',
+  },
+  // 动画变量
+  transitions: {
+    fast: '0.2s ease',
+    medium: '0.3s ease',
+    slow: '0.5s ease',
+  },
+};
+
 
 // 类型定义
 interface Message {
@@ -7,6 +50,8 @@ interface Message {
   senderType: 'user' | 'ai';
   content: string;
   timestamp: string;
+  isTyping?: boolean;
+  displayContent?: string;
 }
 
 interface AIChatConfig {
@@ -17,6 +62,26 @@ interface AIChatConfig {
   provider: string;
   prompt: string;
 }
+
+// Agent 颜色数组
+const agentColors = [
+  '#00a1d6', // 蓝色
+  '#7289da', // 紫色
+  '#43b581', // 绿色
+  '#faa61a', // 橙色
+  '#f04747', // 红色
+  '#99aab5', // 灰色
+  '#673ab7', // 深紫色
+  '#ff9800', // 深橙色
+  '#00bcd4', // 青色
+  '#4caf50'  // 深绿色
+];
+
+// 根据 Agent ID 获取颜色
+const getAgentColor = (agentId: string): string => {
+  const index = parseInt(agentId) % agentColors.length;
+  return agentColors[index];
+};
 
 interface ChatRoom {
   id: string;
@@ -383,6 +448,28 @@ const TagButtonGroup: React.FC<TagButtonProps> = ({ tags, maxVisible, selectedTa
   );
 };
 
+// 打字动画组件
+const TypingAnimation: React.FC<{
+  content: string;
+  speed?: number;
+}> = ({ content, speed = 30 }) => {
+  const [displayedContent, setDisplayedContent] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (currentIndex < content.length) {
+      const timeout = setTimeout(() => {
+        setDisplayedContent(prev => prev + content[currentIndex]);
+        setCurrentIndex(prev => prev + 1);
+      }, speed);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [currentIndex, content, speed]);
+
+  return <>{displayedContent}</>;
+};
+
 function App() {
   // 状态管理
   const [currentPage, setCurrentPage] = useState<'home' | 'chat' | 'login' | 'register'>('home');
@@ -394,6 +481,13 @@ function App() {
   const [aiPrompt, setAiPrompt] = useState(''); // AI角色设定提示词
   const [isLoading, setIsLoading] = useState(false);
   const [chatRounds, setChatRounds] = useState(5); // 默认聊天轮数
+  const [showAgentList, setShowAgentList] = useState(true); // 控制Agent列表的显示/隐藏（移动端）
+  
+  // 聊天消息容器的ref，用于自动滚动
+  const chatMessagesRef = React.useRef<HTMLDivElement>(null);
+  
+  // 当前正在生成的消息ID，用于控制TypingAnimation的显示
+  const [currentTypingMessageId, setCurrentTypingMessageId] = useState<string | null>(null);
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null); // 当前选中的标签
   // 用户认证状态
@@ -890,13 +984,17 @@ function App() {
             reply = await getAIReply(`${lastAiName}说：${lastMessage.content}`, ai.name, context, ai.prompt);
           }
           
-          const aiMessage: Message = {
-            id: (Date.now() + Math.random()).toString(),
-            senderId: ai.id,
-            senderType: 'ai',
-            content: reply,
-            timestamp: new Date().toISOString(),
-          };
+          const messageId = (Date.now() + Math.random()).toString();
+              const aiMessage: Message = {
+                id: messageId,
+                senderId: ai.id,
+                senderType: 'ai',
+                content: reply,
+                timestamp: new Date().toISOString(),
+              };
+              
+              // 设置当前正在生成的消息ID，用于显示打字动画
+              setCurrentTypingMessageId(messageId);
 
           // 保存AI消息到数据库
           try {
@@ -939,6 +1037,8 @@ function App() {
     }
 
     setIsLoading(false);
+    // 清空当前正在生成的消息ID，确保历史消息不显示打字动画
+    setCurrentTypingMessageId(null);
   };
 
   // 返回主页
@@ -971,21 +1071,73 @@ function App() {
     }
   }, []);
 
+  // 当消息列表更新时，自动滚动到最底部
+  React.useEffect(() => {
+    if (currentPage === 'chat' && currentChatRoom && chatMessagesRef.current) {
+      // 延迟执行滚动，确保DOM已经更新
+      setTimeout(() => {
+        chatMessagesRef.current?.scrollTo({
+          top: chatMessagesRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }, 100);
+    }
+  }, [currentChatRoom?.messages, currentPage]);
+
   // 主页
   if (currentPage === 'home') {
     return (
-      <div style={{ backgroundColor: '#f5f5f5', minHeight: '100vh', padding: '20px' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{
+        backgroundColor: styles.colors.background,
+        minHeight: '100vh', 
+        padding: '24px',
+        fontFamily: styles.fonts.body,
+      }}>
+        <div style={{
+          maxWidth: '1200px', 
+          margin: '0 auto',
+        }}>
           {/* 顶部导航栏 */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <div>
-              <h1 style={{ margin: '0', fontSize: '24px', color: '#333', fontWeight: '700' }}>AI聊天室</h1>
-              <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#999' }}>创建一个新的聊天室，添加多个AI模型让它们对话</p>
+          <div style={{
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: '24px',
+            padding: '20px',
+            backgroundColor: styles.colors.white,
+            borderRadius: styles.borderRadius.medium,
+            boxShadow: styles.shadows.card,
+            backdropFilter: 'blur(10px)',
+            border: `1px solid ${styles.colors.border}`,
+          }}>
+            <div style={{ flex: 1 }}>
+              <h1 style={{
+                margin: '0', 
+                fontSize: '28px', 
+                color: styles.colors.secondary,
+                fontWeight: '700',
+                fontFamily: styles.fonts.display,
+                background: `linear-gradient(135deg, ${styles.colors.primary}, ${styles.colors.primaryHover})`,
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+              }}>AI聊天室</h1>
+              <p style={{
+                margin: '6px 0 0 0', 
+                fontSize: '14px', 
+                color: styles.colors.secondaryLighter,
+                fontFamily: styles.fonts.body,
+              }}>创建一个新的聊天室，添加多个AI模型让它们对话</p>
             </div>
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center' }}>
               {isAuthenticated ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '14px', color: '#333' }}>欢迎，{localStorage.getItem('username')}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <span style={{
+                    fontSize: '14px', 
+                    color: styles.colors.secondary,
+                    fontFamily: styles.fonts.body,
+                    fontWeight: '500',
+                  }}>欢迎，{localStorage.getItem('username')}</span>
                   <button 
                     onClick={() => {
                       // 弹出创建聊天室的对话框或模态框
@@ -996,41 +1148,57 @@ function App() {
                       }
                     }} 
                     style={{
-                      padding: '8px 16px',
+                      padding: '10px 20px',
                       fontSize: '14px',
-                      backgroundColor: '#00a1d6',
-                      color: 'white',
+                      backgroundColor: styles.colors.primary,
+                      color: styles.colors.white,
                       border: 'none',
-                      borderRadius: '4px',
+                      borderRadius: styles.borderRadius.button,
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${styles.transitions.medium}`,
+                      boxShadow: '0 4px 12px rgba(0, 161, 214, 0.3)',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = '#00b5e5';
+                      e.currentTarget.style.backgroundColor = styles.colors.primaryHover;
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 161, 214, 0.4)';
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = '#00a1d6';
+                      e.currentTarget.style.backgroundColor = styles.colors.primary;
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 161, 214, 0.3)';
                     }}
                   >
-                    创建
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19"></line>
+                      <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    创建聊天室
                   </button>
                   <button 
                     onClick={logout} 
                     style={{
-                      padding: '6px 12px',
+                      padding: '8px 16px',
                       fontSize: '14px',
-                      backgroundColor: 'white',
-                      color: '#333',
-                      border: '1px solid #e1e1e1',
-                      borderRadius: '4px',
+                      backgroundColor: styles.colors.white,
+                      color: styles.colors.secondary,
+                      border: `1px solid ${styles.colors.border}`,
+                      borderRadius: styles.borderRadius.button,
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${styles.transitions.fast}`,
+                      fontWeight: '500',
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      e.currentTarget.style.backgroundColor = styles.colors.background;
+                      e.currentTarget.style.borderColor = styles.colors.primary;
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.backgroundColor = styles.colors.white;
+                      e.currentTarget.style.borderColor = styles.colors.border;
                     }}
                   >
                     登出
@@ -1041,20 +1209,23 @@ function App() {
                   <button 
                     onClick={() => setCurrentPage('login')} 
                     style={{
-                      padding: '6px 12px',
+                      padding: '8px 16px',
                       fontSize: '14px',
-                      backgroundColor: 'white',
-                      color: '#333',
-                      border: '1px solid #e1e1e1',
-                      borderRadius: '4px',
+                      backgroundColor: styles.colors.white,
+                      color: styles.colors.secondary,
+                      border: `1px solid ${styles.colors.border}`,
+                      borderRadius: styles.borderRadius.button,
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${styles.transitions.fast}`,
+                      fontWeight: '500',
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      e.currentTarget.style.backgroundColor = styles.colors.background;
+                      e.currentTarget.style.borderColor = styles.colors.primary;
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.backgroundColor = styles.colors.white;
+                      e.currentTarget.style.borderColor = styles.colors.border;
                     }}
                   >
                     登录
@@ -1062,20 +1233,24 @@ function App() {
                   <button 
                     onClick={() => setCurrentPage('register')} 
                     style={{
-                      padding: '6px 12px',
+                      padding: '8px 16px',
                       fontSize: '14px',
-                      backgroundColor: '#00a1d6',
-                      color: 'white',
+                      backgroundColor: styles.colors.primary,
+                      color: styles.colors.white,
                       border: 'none',
-                      borderRadius: '4px',
+                      borderRadius: styles.borderRadius.button,
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
+                      transition: `all ${styles.transitions.fast}`,
+                      boxShadow: '0 4px 12px rgba(0, 161, 214, 0.3)',
+                      fontWeight: '600',
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = '#00b5e5';
+                      e.currentTarget.style.backgroundColor = styles.colors.primaryHover;
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 161, 214, 0.4)';
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = '#00a1d6';
+                      e.currentTarget.style.backgroundColor = styles.colors.primary;
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 161, 214, 0.3)';
                     }}
                   >
                     注册
@@ -1086,187 +1261,324 @@ function App() {
           </div>
           
           {/* 标签板块 - 类似B站的标签导航 */}
-          <div style={{ marginBottom: '24px', padding: '16px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e1e1e1', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', color: '#333', fontWeight: '600' }}>标签板块</h3>
+          <div style={{
+            marginBottom: '24px', 
+            padding: '20px', 
+            backgroundColor: styles.colors.white,
+            borderRadius: styles.borderRadius.medium,
+            border: `1px solid ${styles.colors.border}`,
+            boxShadow: styles.shadows.card,
+          }}>
+
             <div style={{ position: 'relative' }}>
               {/* 标签容器 - 两行显示 */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', maxHeight: '80px' }}>
+              <div style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap', 
+                gap: '12px', 
+                maxHeight: '80px',
+                alignContent: 'flex-start',
+              }}>
                 {/* 全部标签 */}
                 <button 
                   onClick={() => setSelectedTag(null)}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '16px',
-                    border: '1px solid #e1e1e1',
-                    backgroundColor: selectedTag === null ? '#00a1d6' : 'white',
-                    color: selectedTag === null ? 'white' : '#333',
+                    padding: '10px 20px',
+                    borderRadius: styles.borderRadius.large,
+                    border: `1px solid ${styles.colors.border}`,
+                    backgroundColor: selectedTag === null ? styles.colors.primary : styles.colors.white,
+                    color: selectedTag === null ? styles.colors.white : styles.colors.secondary,
                     fontSize: '14px',
-                    fontWeight: selectedTag === null ? '600' : '400',
+                    fontWeight: selectedTag === null ? '600' : '500',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease',
+                    transition: `all ${styles.transitions.fast}`,
                     whiteSpace: 'nowrap',
                     textAlign: 'center',
-                    flexShrink: 0
+                    flexShrink: 0,
+                    fontFamily: styles.fonts.body,
                   }}
                   onMouseOver={(e) => {
                     if (selectedTag !== null) {
-                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      e.currentTarget.style.backgroundColor = styles.colors.background;
+                      e.currentTarget.style.borderColor = styles.colors.primary;
                     }
                   }}
                   onMouseOut={(e) => {
                     if (selectedTag !== null) {
-                      e.currentTarget.style.backgroundColor = 'white';
+                      e.currentTarget.style.backgroundColor = styles.colors.white;
+                      e.currentTarget.style.borderColor = styles.colors.border;
                     }
                   }}
                 >
                   全部
                 </button>
-                {/* 一级标签 - 第一行和第二行的标签 */}
-                {tagConfig.slice(0, 28).map(config => (
-                  <button 
-                    key={config.primaryTag}
-                    onClick={() => setSelectedTag(config.primaryTag)}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '16px',
-                      border: '1px solid #e1e1e1',
-                      backgroundColor: selectedTag === config.primaryTag ? '#00a1d6' : 'white',
-                      color: selectedTag === config.primaryTag ? 'white' : '#333',
-                      fontSize: '14px',
-                      fontWeight: selectedTag === config.primaryTag ? '600' : '400',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      whiteSpace: 'nowrap',
-                      textAlign: 'center',
-                      flexShrink: 0
-                    }}
-                    onMouseOver={(e) => {
-                      if (selectedTag !== config.primaryTag) {
-                        e.currentTarget.style.backgroundColor = '#f5f5f5';
-                      }
-                    }}
-                    onMouseOut={(e) => {
-                      if (selectedTag !== config.primaryTag) {
-                        e.currentTarget.style.backgroundColor = 'white';
-                      }
-                    }}
-                  >
-                    {config.primaryTag}
-                  </button>
-                ))}
-                {/* 更多标签 */}
-                {tagConfig.length > 28 && (
-                  <div style={{ position: 'relative' }}>
-                    <button 
-                      style={{
-                        padding: '8px 16px',
-                        borderRadius: '16px',
-                        border: '1px solid #e1e1e1',
-                        backgroundColor: 'white',
-                        color: '#333',
-                        fontSize: '14px',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        whiteSpace: 'nowrap',
-                        textAlign: 'center',
-                        flexShrink: 0
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f5f5f5';
-                        // 显示更多标签的下拉菜单
-                        const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
-                        if (dropdown) {
-                          dropdown.style.display = 'flex';
-                        }
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.backgroundColor = 'white';
-                        // 隐藏更多标签的下拉菜单
-                        const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
-                        if (dropdown) {
-                          dropdown.style.display = 'none';
-                        }
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        // 点击时也显示下拉菜单
-                        const dropdown = e.currentTarget.nextElementSibling as HTMLElement;
-                        if (dropdown) {
-                          dropdown.style.display = dropdown.style.display === 'flex' ? 'none' : 'flex';
-                        }
-                      }}
-                    >
-                      更多
-                    </button>
-                    {/* 更多标签下拉菜单 */}
-                    <div 
-                      style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: 0,
-                        marginTop: '8px',
-                        backgroundColor: 'white',
-                        border: '1px solid #e1e1e1',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
-                        padding: '12px',
-                        display: 'none',
-                        flexDirection: 'column',
-                        gap: '8px',
-                        minWidth: '120px',
-                        zIndex: 1000
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.display = 'flex';
-                        // 同时保持更多按钮的悬停状态
-                        const button = e.currentTarget.previousElementSibling as HTMLElement;
-                        if (button) {
-                          button.style.backgroundColor = '#f5f5f5';
-                        }
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.display = 'none';
-                        // 同时恢复更多按钮的正常状态
-                        const button = e.currentTarget.previousElementSibling as HTMLElement;
-                        if (button) {
-                          button.style.backgroundColor = 'white';
-                        }
-                      }}
-                    >
-                      {tagConfig.slice(28).map(config => (
+                {/* 一级标签 - 动态计算显示数量 */}
+                {(() => {
+                  // 计算可见标签数量
+                  const containerWidth = window.innerWidth;
+                  const maxContainerWidth = 1200; // 与页面最大宽度一致
+                  const actualContainerWidth = Math.min(containerWidth - 48, maxContainerWidth); // 减去左右padding
+                  
+                  // 估算每个标签的宽度（包括padding和gap）
+                  const tagWidth = 100; // 估算值，实际会根据内容调整
+                  const gapWidth = 12;
+                  
+                  // 计算每行最多能显示的标签数
+                  const tagsPerRow = Math.floor((actualContainerWidth) / (tagWidth + gapWidth));
+                  
+                  // 计算两行最多能显示的标签数
+                  const maxVisibleTags = tagsPerRow * 2 - 1; // 减去"全部"标签
+                  
+                  // 确保至少显示一些标签
+                  const visibleTagCount = Math.max(10, maxVisibleTags);
+                  
+                  return (
+                    <>
+                      {/* 显示可见标签 */}
+                      {tagConfig.slice(0, visibleTagCount).map(config => (
                         <button 
                           key={config.primaryTag}
                           onClick={() => setSelectedTag(config.primaryTag)}
                           style={{
-                            padding: '6px 12px',
-                            borderRadius: '12px',
-                            border: '1px solid #e1e1e1',
-                            backgroundColor: selectedTag === config.primaryTag ? '#00a1d6' : 'white',
-                            color: selectedTag === config.primaryTag ? 'white' : '#333',
-                            fontSize: '13px',
-                            fontWeight: selectedTag === config.primaryTag ? '600' : '400',
+                            padding: '10px 20px',
+                            borderRadius: styles.borderRadius.large,
+                            border: `1px solid ${styles.colors.border}`,
+                            backgroundColor: selectedTag === config.primaryTag ? styles.colors.primary : styles.colors.white,
+                            color: selectedTag === config.primaryTag ? styles.colors.white : styles.colors.secondary,
+                            fontSize: '14px',
+                            fontWeight: selectedTag === config.primaryTag ? '600' : '500',
                             cursor: 'pointer',
-                            transition: 'all 0.2s ease',
-                            textAlign: 'left',
-                            whiteSpace: 'nowrap'
+                            transition: `all ${styles.transitions.fast}`,
+                            whiteSpace: 'nowrap',
+                            textAlign: 'center',
+                            flexShrink: 0,
+                            fontFamily: styles.fonts.body,
+                            position: 'relative',
+                            overflow: 'hidden',
                           }}
                           onMouseOver={(e) => {
                             if (selectedTag !== config.primaryTag) {
-                              e.currentTarget.style.backgroundColor = '#f5f5f5';
+                              e.currentTarget.style.backgroundColor = styles.colors.background;
+                              e.currentTarget.style.borderColor = styles.colors.primary;
+                              e.currentTarget.style.transform = 'translateY(-2px)';
                             }
                           }}
                           onMouseOut={(e) => {
                             if (selectedTag !== config.primaryTag) {
-                              e.currentTarget.style.backgroundColor = 'white';
+                              e.currentTarget.style.backgroundColor = styles.colors.white;
+                              e.currentTarget.style.borderColor = styles.colors.border;
+                              e.currentTarget.style.transform = 'translateY(0)';
                             }
                           }}
                         >
                           {config.primaryTag}
                         </button>
                       ))}
-                    </div>
-                  </div>
-                )}
+                      {/* 更多标签 */}
+                      {tagConfig.length > visibleTagCount && (
+                        <div style={{ position: 'relative' }}>
+                          {/* 使用ref来引用下拉框 */}
+                          {(() => {
+                            let dropdownVisible = false;
+                            let dropdownElement: HTMLElement | null = null;
+                            let buttonElement: HTMLElement | null = null;
+                            let mouseEnterCount = 0;
+                            let hideTimeout: NodeJS.Timeout | null = null;
+                            
+                            const showDropdown = () => {
+                              if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                              }
+                              if (dropdownElement && !dropdownVisible) {
+                                dropdownElement.style.display = 'flex';
+                                dropdownVisible = true;
+                              }
+                            };
+                            
+                            const hideDropdown = () => {
+                              if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                                hideTimeout = null;
+                              }
+                              if (dropdownElement && dropdownVisible) {
+                                dropdownElement.style.display = 'none';
+                                dropdownVisible = false;
+                              }
+                              if (buttonElement) {
+                                buttonElement.style.backgroundColor = styles.colors.white;
+                                buttonElement.style.borderColor = styles.colors.border;
+                                buttonElement.style.transform = 'translateY(0)';
+                              }
+                              mouseEnterCount = 0;
+                            };
+                            
+                            const handleButtonMouseOver = (e: React.MouseEvent<HTMLButtonElement>) => {
+                              const button = e.currentTarget;
+                              button.style.backgroundColor = styles.colors.background;
+                              button.style.borderColor = styles.colors.primary;
+                              button.style.transform = 'translateY(-2px)';
+                              buttonElement = button;
+                              // 获取下拉框元素
+                              if (!dropdownElement) {
+                                dropdownElement = button.nextElementSibling as HTMLElement;
+                              }
+                              mouseEnterCount++;
+                              showDropdown();
+                            };
+                            
+                            const handleButtonMouseOut = () => {
+                              mouseEnterCount--;
+                              // 延迟隐藏，给用户时间移动鼠标到下拉框
+                              if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                              }
+                              hideTimeout = setTimeout(() => {
+                                if (mouseEnterCount <= 0) {
+                                  hideDropdown();
+                                }
+                              }, 200);
+                            };
+                            
+                            const handleButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+                              e.preventDefault();
+                              const button = e.currentTarget;
+                              // 获取下拉框元素
+                              if (!dropdownElement) {
+                                dropdownElement = button.nextElementSibling as HTMLElement;
+                              }
+                              if (dropdownElement) {
+                                if (dropdownVisible) {
+                                  hideDropdown();
+                                } else {
+                                  showDropdown();
+                                }
+                              }
+                            };
+                            
+                            const handleDropdownMouseOver = (e: React.MouseEvent<HTMLDivElement>) => {
+                              const dropdown = e.currentTarget;
+                              dropdownElement = dropdown;
+                              mouseEnterCount++;
+                              showDropdown();
+                              // 同时保持更多按钮的悬停状态
+                              if (buttonElement) {
+                                buttonElement.style.backgroundColor = styles.colors.background;
+                                buttonElement.style.borderColor = styles.colors.primary;
+                                buttonElement.style.transform = 'translateY(-2px)';
+                              }
+                            };
+                            
+                            const handleDropdownMouseOut = () => {
+                              mouseEnterCount--;
+                              // 延迟隐藏，给用户时间移动鼠标回按钮
+                              if (hideTimeout) {
+                                clearTimeout(hideTimeout);
+                              }
+                              hideTimeout = setTimeout(() => {
+                                if (mouseEnterCount <= 0) {
+                                  hideDropdown();
+                                }
+                              }, 200);
+                            };
+                            
+                            const handleTagClick = (tag: string) => {
+                              setSelectedTag(tag);
+                              hideDropdown();
+                            };
+                            
+                            return (
+                              <>
+                                <button 
+                                  className="more-button"
+                                  style={{
+                                    padding: '10px 20px',
+                                    borderRadius: styles.borderRadius.large,
+                                    border: `1px solid ${styles.colors.border}`,
+                                    backgroundColor: styles.colors.white,
+                                    color: styles.colors.secondary,
+                                    fontSize: '14px',
+                                    cursor: 'pointer',
+                                    transition: `all ${styles.transitions.fast}`,
+                                    whiteSpace: 'nowrap',
+                                    textAlign: 'center',
+                                    flexShrink: 0,
+                                    fontFamily: styles.fonts.body,
+                                    fontWeight: '500',
+                                  }}
+                                  onMouseOver={handleButtonMouseOver}
+                                  onMouseOut={handleButtonMouseOut}
+                                  onClick={handleButtonClick}
+                                >
+                                  更多
+                                </button>
+                                {/* 更多标签下拉菜单 */}
+                                <div 
+                                  className="dropdown-menu"
+                                  style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    marginTop: '8px',
+                                    backgroundColor: styles.colors.white,
+                                    border: `1px solid ${styles.colors.border}`,
+                                    borderRadius: styles.borderRadius.medium,
+                                    boxShadow: styles.shadows.dropdown,
+                                    padding: '16px',
+                                    display: 'none',
+                                    flexDirection: 'column',
+                                    gap: '10px',
+                                    minWidth: '140px',
+                                    zIndex: 1000,
+                                    maxHeight: '300px',
+                                    overflowY: 'auto',
+                                  }}
+                                  onMouseOver={handleDropdownMouseOver}
+                                  onMouseOut={handleDropdownMouseOut}
+                                >
+                                  {tagConfig.slice(visibleTagCount).map(config => (
+                                    <button 
+                                      key={config.primaryTag}
+                                      onClick={() => handleTagClick(config.primaryTag)}
+                                      style={{
+                                        padding: '8px 16px',
+                                        borderRadius: styles.borderRadius.button,
+                                        border: `1px solid ${styles.colors.border}`,
+                                        backgroundColor: selectedTag === config.primaryTag ? styles.colors.primary : styles.colors.white,
+                                        color: selectedTag === config.primaryTag ? styles.colors.white : styles.colors.secondary,
+                                        fontSize: '13px',
+                                        fontWeight: selectedTag === config.primaryTag ? '600' : '500',
+                                        cursor: 'pointer',
+                                        transition: `all ${styles.transitions.fast}`,
+                                        textAlign: 'left',
+                                        whiteSpace: 'nowrap',
+                                        fontFamily: styles.fonts.body,
+                                      }}
+                                      onMouseOver={(e) => {
+                                        if (selectedTag !== config.primaryTag) {
+                                          e.currentTarget.style.backgroundColor = styles.colors.background;
+                                          e.currentTarget.style.borderColor = styles.colors.primary;
+                                        }
+                                      }}
+                                      onMouseOut={(e) => {
+                                        if (selectedTag !== config.primaryTag) {
+                                          e.currentTarget.style.backgroundColor = styles.colors.white;
+                                          e.currentTarget.style.borderColor = styles.colors.border;
+                                        }
+                                      }}
+                                    >
+                                      {config.primaryTag}
+                                    </button>
+                                  ))}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -1274,64 +1586,121 @@ function App() {
 
 
           {/* 历史聊天室 */}
-          <div style={{ padding: '20px', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e1e1e1', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)' }}>
-            <h2 style={{ margin: '0 0 20px 0', fontSize: '18px', color: '#333', fontWeight: '600' }}>历史聊天室</h2>
+          <div style={{
+            padding: '24px', 
+            backgroundColor: styles.colors.white,
+            borderRadius: styles.borderRadius.medium,
+            border: `1px solid ${styles.colors.border}`,
+            boxShadow: styles.shadows.card,
+          }}>
+            <h2 style={{
+              margin: '0 0 24px 0', 
+              fontSize: '20px', 
+              color: styles.colors.secondary,
+              fontWeight: '600',
+              fontFamily: styles.fonts.display,
+            }}>历史聊天室</h2>
             
             {/* 聊天室卡片列表 */}
             {chatRooms.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', backgroundColor: '#f9f9f9', borderRadius: '8px' }}>
-                <p style={{ margin: '0', color: '#999' }}>暂无历史聊天室</p>
+              <div style={{
+                textAlign: 'center', 
+                padding: '60px 0', 
+                backgroundColor: styles.colors.background,
+                borderRadius: styles.borderRadius.medium,
+                border: `1px dashed ${styles.colors.border}`,
+              }}>
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={styles.colors.secondaryLighter} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px', opacity: 0.6 }}>
+                  <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                  <line x1="8" y1="21" x2="16" y2="21"></line>
+                  <line x1="12" y1="17" x2="12" y2="21"></line>
+                </svg>
+                <p style={{
+                  margin: '0', 
+                  color: styles.colors.secondaryLighter,
+                  fontSize: '16px',
+                  fontFamily: styles.fonts.body,
+                }}>暂无历史聊天室</p>
+                <p style={{
+                  margin: '8px 0 0 0', 
+                  color: styles.colors.secondaryLighter,
+                  fontSize: '14px',
+                  fontFamily: styles.fonts.body,
+                }}>点击上方按钮创建您的第一个聊天室</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', 
+                gap: '20px',
+              }}>
                 {chatRooms
                   .filter(room => selectedTag === null || room.primaryTag === selectedTag)
                   .map(room => (
                     <div 
                       key={room.id} 
                       style={{
-                        padding: '16px',
-                        border: '1px solid #e1e1e1',
-                        borderRadius: '8px',
-                        backgroundColor: 'white',
-                        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
+                        padding: '20px',
+                        border: `1px solid ${styles.colors.border}`,
+                        borderRadius: styles.borderRadius.medium,
+                        backgroundColor: styles.colors.cardBg,
+                        boxShadow: styles.shadows.card,
                         cursor: 'pointer',
-                        transition: 'all 0.2s ease',
+                        transition: `all ${styles.transitions.medium}`,
+                        position: 'relative',
+                        overflow: 'hidden',
                       }}
                       onClick={() => enterChatRoom(room)}
                       onMouseOver={(e) => {
-                        e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = styles.shadows.hover;
+                        e.currentTarget.style.transform = 'translateY(-4px)';
                       }}
                       onMouseOut={(e) => {
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.05)';
+                        e.currentTarget.style.boxShadow = styles.shadows.card;
                         e.currentTarget.style.transform = 'translateY(0)';
                       }}
                     >
-                      <h3 style={{ margin: '0 0 10px 0', fontSize: '16px', color: '#333', fontWeight: '600' }}>{room.name}</h3>
-                      <div style={{ marginBottom: '12px', fontSize: '12px', color: '#999' }}>
-                        <span style={{ marginRight: '12px' }}>{new Date(room.createdAt).toLocaleString()}</span>
+                      <h3 style={{
+                        margin: '0 0 12px 0', 
+                        fontSize: '18px', 
+                        color: styles.colors.secondary,
+                        fontWeight: '600',
+                        fontFamily: styles.fonts.display,
+                      }}>{room.name}</h3>
+                      <div style={{
+                        marginBottom: '16px', 
+                        fontSize: '13px', 
+                        color: styles.colors.secondaryLighter,
+                        fontFamily: styles.fonts.body,
+                      }}>
+                        <span style={{ marginRight: '16px' }}>{new Date(room.createdAt).toLocaleString()}</span>
                         <span>轮数: {room.chatRounds}</span>
-                        <span style={{ marginLeft: '12px', color: '#00a1d6' }}>分类: {room.primaryTag}</span>
+                        <span style={{ marginLeft: '16px', color: styles.colors.primary }}>分类: {room.primaryTag}</span>
                       </div>
                       {/* 显示一级标签 */}
-                      <div style={{ marginBottom: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      <div style={{ 
+                        marginBottom: '12px', 
+                        display: 'flex', 
+                        flexWrap: 'wrap', 
+                        gap: '8px',
+                      }}>
                         <span 
                           style={{
                             display: 'inline-block',
-                            padding: '2px 8px',
-                            borderRadius: '10px',
-                            backgroundColor: '#00a1d6',
-                            color: 'white',
-                            fontSize: '10px',
-                            fontWeight: '600'
+                            padding: '4px 12px',
+                            borderRadius: styles.borderRadius.large,
+                            backgroundColor: styles.colors.primary,
+                            color: styles.colors.white,
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            fontFamily: styles.fonts.body,
                           }}
                         >
                           {room.primaryTag}
                         </span>
                       </div>
                       {/* 显示二级标签 */}
-                      <div style={{ marginBottom: '16px' }}>
+                      <div style={{ marginBottom: '20px' }}>
                         <TagButtonGroup 
                           tags={room.tags}
                           maxVisible={5} // 最多显示5个标签
@@ -1347,20 +1716,25 @@ function App() {
                         }}
                         style={{
                           width: '100%',
-                          padding: '8px 12px',
+                          padding: '10px 16px',
                           fontSize: '14px',
-                          backgroundColor: '#00a1d6',
-                          color: 'white',
+                          backgroundColor: styles.colors.primary,
+                          color: styles.colors.white,
                           border: 'none',
-                          borderRadius: '4px',
+                          borderRadius: styles.borderRadius.button,
                           cursor: 'pointer',
-                          transition: 'background-color 0.2s ease',
+                          transition: `all ${styles.transitions.fast}`,
+                          fontFamily: styles.fonts.body,
+                          fontWeight: '500',
+                          boxShadow: '0 4px 12px rgba(0, 161, 214, 0.3)',
                         }}
                         onMouseOver={(e) => {
-                          e.currentTarget.style.backgroundColor = '#00b5e5';
+                          e.currentTarget.style.backgroundColor = styles.colors.primaryHover;
+                          e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 161, 214, 0.4)';
                         }}
                         onMouseOut={(e) => {
-                          e.currentTarget.style.backgroundColor = '#00a1d6';
+                          e.currentTarget.style.backgroundColor = styles.colors.primary;
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 161, 214, 0.3)';
                         }}
                       >
                         进入聊天室
@@ -1378,200 +1752,524 @@ function App() {
   // 聊天室页面
   if (currentPage === 'chat' && currentChatRoom) {
     return (
-      <div className="container">
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h1>{currentChatRoom.name}</h1>
-            <button 
-              onClick={goBackHome}
-              style={{
-                backgroundColor: '#00a1d6',
-                color: 'white',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                fontSize: '14px',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.backgroundColor = '#00b5e5';
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = '#00a1d6';
-              }}
-            >
-              返回主页
-            </button>
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <h2>添加AI</h2>
-            {isAuthenticated ? (
-              <>
-                <div style={{ marginBottom: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="输入AI名称"
-                    value={aiName}
-                    onChange={(e) => setAiName(e.target.value)}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <textarea
-                    placeholder="输入AI角色设定提示词（例如：你是一个幽默的助手，擅长讲笑话）"
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    style={{ width: '100%', height: '80px' }}
-                  />
-                </div>
+      <div className="container" style={{ height: '100vh', padding: 0 }}>
+        {/* 移动端 Agent 列表切换按钮 */}
+        <button 
+          className="agent-toggle"
+          style={{ 
+            display: 'none',
+            position: 'fixed',
+            left: '10px',
+            top: '10px',
+            zIndex: 1001,
+            background: styles.colors.white,
+            border: `1px solid ${styles.colors.border}`,
+            borderRadius: styles.borderRadius.medium,
+            padding: '8px',
+            cursor: 'pointer',
+            boxShadow: styles.shadows.card
+          }}
+          onClick={() => setShowAgentList(!showAgentList)}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={styles.colors.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        
+        <div style={{ 
+          display: 'flex', 
+          height: '100%',
+          backgroundColor: styles.colors.white,
+          borderRadius: styles.borderRadius.medium,
+          boxShadow: styles.shadows.card,
+          overflow: 'hidden'
+        }}>
+          {/* 左侧 Agent 列表 */}
+          <div style={{ 
+            width: '320px', 
+            borderRight: `1px solid ${styles.colors.border}`,
+            display: 'flex',
+            flexDirection: 'column',
+            backgroundColor: styles.colors.background,
+            position: 'relative',
+            transform: showAgentList ? 'translateX(0)' : '-100%',
+            transition: 'transform 0.3s ease',
+            zIndex: 1000
+          }} className="mobile-agent-list">
+            {/* 左侧头部 */}
+            <div style={{ 
+              padding: '20px', 
+              borderBottom: `1px solid ${styles.colors.border}`,
+              backgroundColor: styles.colors.white
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '20px' }}>
                 <button 
-                  onClick={addAI}
+                  onClick={goBackHome}
                   style={{
-                    backgroundColor: '#00a1d6',
-                    color: 'white',
+                    backgroundColor: styles.colors.primary,
+                    color: styles.colors.white,
                     border: 'none',
                     padding: '8px 16px',
-                    borderRadius: '4px',
+                    borderRadius: styles.borderRadius.button,
                     fontSize: '14px',
                     cursor: 'pointer',
-                    transition: 'all 0.2s ease'
+                    transition: `all ${styles.transitions.fast}`,
+                    fontWeight: '500'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.backgroundColor = '#00b5e5';
+                    e.currentTarget.style.backgroundColor = styles.colors.primaryHover;
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.backgroundColor = '#00a1d6';
+                    e.currentTarget.style.backgroundColor = styles.colors.primary;
                   }}
                 >
-                  添加
+                  返回主页
                 </button>
-              </>
-            ) : (
-              <p style={{ color: '#999' }}>请登录后添加AI</p>
-            )}
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <h2>已添加的AI</h2>
-            {currentChatRoom.ais.length === 0 ? (
-              <p>暂无添加的AI，请至少添加两个AI模型</p>
-            ) : (
-              <ul>
-                {currentChatRoom.ais.map(ai => (
-                  <li key={ai.id} style={{ marginBottom: '15px', padding: '10px', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
-                      <img src={ai.avatar} alt={ai.name} className="message-avatar" />
-                      <span style={{ fontWeight: '600' }}>{ai.name} ({ai.provider})</span>
+              </div>
+              
+              {/* 添加 AI 表单 */}
+              <div style={{ marginBottom: '16px' }}>
+                <h3 style={{ 
+                  margin: '0 0 12px 0', 
+                  fontSize: '14px', 
+                  color: styles.colors.secondary,
+                  fontWeight: '600'
+                }}>添加AI</h3>
+                {isAuthenticated ? (
+                  <>
+                    <div style={{ marginBottom: '8px' }}>
+                      <input
+                        type="text"
+                        placeholder="输入AI名称"
+                        value={aiName}
+                        onChange={(e) => setAiName(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          border: `1px solid ${styles.colors.border}`,
+                          borderRadius: styles.borderRadius.small,
+                          fontSize: '13px'
+                        }}
+                      />
                     </div>
-                    <div style={{ fontSize: '12px', color: '#666', marginLeft: '50px' }}>
-                      <strong>角色设定：</strong>{ai.prompt}
+                    <div style={{ marginBottom: '12px' }}>
+                      <textarea
+                        placeholder="输入AI角色设定提示词"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        style={{
+                          width: '100%',
+                          height: '60px',
+                          padding: '8px 12px',
+                          border: `1px solid ${styles.colors.border}`,
+                          borderRadius: styles.borderRadius.small,
+                          fontSize: '13px',
+                          resize: 'none'
+                        }}
+                      />
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <h2>聊天设置</h2>
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <label>聊天轮数：</label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                value={currentChatRoom.chatRounds}
-                onChange={updateChatRounds}
-                style={{ width: '60px', marginLeft: '10px' }}
-              />
-              <span style={{ marginLeft: '10px', fontSize: '12px', color: '#999' }}>
-                （AI之间将对话{currentChatRoom.chatRounds}轮）
-              </span>
+                    <button 
+                      onClick={addAI}
+                      style={{
+                        width: '100%',
+                        backgroundColor: styles.colors.primary,
+                        color: styles.colors.white,
+                        border: 'none',
+                        padding: '8px 16px',
+                        borderRadius: styles.borderRadius.button,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        transition: `all ${styles.transitions.fast}`,
+                        fontWeight: '500'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.backgroundColor = styles.colors.primaryHover;
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.backgroundColor = styles.colors.primary;
+                      }}
+                    >
+                      添加AI
+                    </button>
+                  </>
+                ) : (
+                  <p style={{ color: styles.colors.secondaryLighter, fontSize: '13px', margin: 0 }}>请登录后添加AI</p>
+                )}
+              </div>
+              
+              {/* 聊天设置 */}
+              <div style={{ marginBottom: '16px' }}>
+                <h3 style={{ 
+                  margin: '0 0 12px 0', 
+                  fontSize: '14px', 
+                  color: styles.colors.secondary,
+                  fontWeight: '600'
+                }}>聊天设置</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <label style={{ fontSize: '13px', color: styles.colors.secondaryLight, whiteSpace: 'nowrap' }}>聊天轮数：</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={currentChatRoom.chatRounds}
+                    onChange={updateChatRounds}
+                    style={{
+                      width: '50px',
+                      padding: '6px 8px',
+                      border: `1px solid ${styles.colors.border}`,
+                      borderRadius: styles.borderRadius.small,
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Agent 列表 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+              <h3 style={{ 
+                margin: '0 0 16px 0', 
+                fontSize: '14px', 
+                color: styles.colors.secondary,
+                fontWeight: '600'
+              }}>已添加的AI</h3>
+              {currentChatRoom.ais.length === 0 ? (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '40px 20px', 
+                  backgroundColor: styles.colors.white,
+                  borderRadius: styles.borderRadius.medium,
+                  border: `1px dashed ${styles.colors.border}`
+                }}>
+                  <p style={{ color: styles.colors.secondaryLighter, fontSize: '13px', margin: 0 }}>暂无添加的AI，请至少添加两个AI模型</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {currentChatRoom.ais.map(ai => (
+                    <div key={ai.id} style={{ 
+                      padding: '12px', 
+                      border: `1px solid ${styles.colors.border}`, 
+                      borderRadius: styles.borderRadius.medium,
+                      backgroundColor: styles.colors.white,
+                      transition: `all ${styles.transitions.fast}`
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <img src={ai.avatar} alt={ai.name} style={{ 
+                          width: '32px', 
+                          height: '32px', 
+                          borderRadius: '50%',
+                          objectFit: 'cover'
+                        }} />
+                        <span style={{ fontWeight: '600', fontSize: '13px', color: styles.colors.secondary }}>{ai.name}</span>
+                        <span style={{ 
+                          fontSize: '11px', 
+                          color: styles.colors.secondaryLighter,
+                          backgroundColor: styles.colors.tagBg,
+                          padding: '2px 8px',
+                          borderRadius: '10px'
+                        }}>{ai.provider}</span>
+                      </div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: styles.colors.secondaryLight, 
+                        lineHeight: '1.3',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}>
+                        <strong>角色设定：</strong>{ai.prompt}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
-
-          <div style={{ marginBottom: '20px' }}>
-            <h2>聊天记录</h2>
-            <div style={{ maxHeight: '400px', overflowY: 'auto', padding: '10px', border: '1px solid var(--border-color)', borderRadius: 'var(--border-radius)' }}>
+          
+          {/* 右侧聊天区 */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }} className="chat-area">
+            {/* 聊天室主题标题栏 */}
+            <div style={{ 
+              padding: '16px 24px', 
+              borderBottom: `1px solid ${styles.colors.border}`,
+              backgroundColor: styles.colors.white,
+              boxShadow: styles.shadows.card
+            }}>
+              <h2 style={{ 
+                margin: 0, 
+                fontSize: '18px', 
+                color: styles.colors.secondary,
+                fontWeight: '600'
+              }}>{currentChatRoom.name}</h2>
+              <p style={{ 
+                margin: '4px 0 0 0', 
+                fontSize: '12px', 
+                color: styles.colors.secondaryLighter
+              }}>AI 聊天室 · {currentChatRoom.ais.length} 个 AI</p>
+            </div>
+            {/* 聊天记录区域 */}
+            <div 
+              ref={chatMessagesRef}
+              style={{ 
+                flex: 1, 
+                overflowY: 'auto', 
+                padding: '24px',
+                backgroundColor: styles.colors.background
+              }}
+              id="chat-messages-container"
+            >
               {currentChatRoom.messages.length === 0 ? (
-                <p>暂无聊天记录</p>
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '80px 20px', 
+                  backgroundColor: styles.colors.white,
+                  borderRadius: styles.borderRadius.medium,
+                  border: `1px dashed ${styles.colors.border}`,
+                  maxWidth: '400px',
+                  margin: '0 auto'
+                }}>
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={styles.colors.secondaryLighter} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: '16px', opacity: 0.6 }}>
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                  <p style={{ color: styles.colors.secondaryLighter, fontSize: '14px', margin: 0 }}>暂无聊天记录</p>
+                  <p style={{ color: styles.colors.secondaryLighter, fontSize: '12px', margin: '8px 0 0 0' }}>发送消息开始对话</p>
+                </div>
               ) : (
                 currentChatRoom.messages.map(message => {
                   const sender = message.senderType === 'user' 
-                    ? { name: '我', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=user%20avatar&image_size=square' }
-                    : currentChatRoom.ais.find(ai => ai.id === message.senderId) || { name: 'AI', avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=ai%20avatar&image_size=square' };
+                    ? { 
+                        name: '我', 
+                        avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=user%20avatar%20friendly%20person&image_size=square',
+                        isUser: true
+                      }
+                    : {
+                        ...(currentChatRoom.ais.find(ai => ai.id === message.senderId) || { 
+                          name: 'AI', 
+                          avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=ai%20avatar&image_size=square'
+                        }),
+                        isUser: false
+                      };
 
                   return (
-                    <div key={message.id} className="message">
-                      <img src={sender.avatar} alt={sender.name} className="message-avatar" />
-                      <div className="message-content">
-                        <div className="message-header">
-                          <span className="message-sender">{sender.name}</span>
-                          <span className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</span>
+                    <div key={message.id} style={{ 
+                      display: 'flex', 
+                      marginBottom: '24px',
+                      alignItems: 'flex-start',
+                      justifyContent: sender.isUser ? 'flex-end' : 'flex-start'
+                    }}>
+                      {!sender.isUser && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <img src={sender.avatar} alt={sender.name} style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            marginRight: '12px',
+                            border: `2px solid ${getAgentColor(sender.id || '0')}`,
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                          }} />
                         </div>
-                        <div className="message-text">{message.content}</div>
+                      )}
+                      <div style={{ maxWidth: '70%' }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          marginBottom: '8px',
+                          justifyContent: sender.isUser ? 'flex-end' : 'flex-start'
+                        }}>
+                          <span style={{ 
+                            fontWeight: '600', 
+                            fontSize: '14px',
+                            color: sender.isUser ? styles.colors.primary : getAgentColor(sender.id || '0'),
+                            marginRight: sender.isUser ? 0 : '10px',
+                            textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
+                          }}>{sender.name}</span>
+                          <span style={{ 
+                            fontSize: '12px', 
+                            color: styles.colors.secondaryLighter,
+                            backgroundColor: styles.colors.background,
+                            padding: '2px 6px',
+                            borderRadius: '10px'
+                          }}>{new Date(message.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <div style={{
+                          padding: '14px 18px',
+                          borderRadius: sender.isUser ? '18px 18px 6px 18px' : '18px 18px 18px 6px',
+                          backgroundColor: sender.isUser ? styles.colors.primary : styles.colors.white,
+                          color: sender.isUser ? styles.colors.white : styles.colors.secondary,
+                          fontSize: '14px',
+                          lineHeight: '1.5',
+                          boxShadow: `0 4px 12px ${sender.isUser ? 'rgba(0, 161, 214, 0.2)' : 'rgba(0, 0, 0, 0.1)'}`,
+                          border: sender.isUser ? `1px solid ${styles.colors.primaryHover}` : `1px solid ${styles.colors.border}`,
+                          position: 'relative',
+                          transition: `all ${styles.transitions.fast}`
+                        }}>
+                          {sender.isUser ? message.content : (message.id === currentTypingMessageId ? <TypingAnimation content={message.content} /> : message.content)}
+                        </div>
                       </div>
+                      {sender.isUser && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <img src={sender.avatar} alt={sender.name} style={{ 
+                            width: '40px', 
+                            height: '40px', 
+                            borderRadius: '50%',
+                            objectFit: 'cover',
+                            marginLeft: '12px',
+                            border: `2px solid ${styles.colors.primary}`,
+                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+                          }} />
+                        </div>
+                      )}
                     </div>
                   );
                 })
               )}
               {isLoading && (
-                <div style={{ marginTop: '10px', color: '#999', fontSize: '14px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center',
+                  marginTop: '16px',
+                  color: styles.colors.secondaryLighter,
+                  fontSize: '13px'
+                }}>
+                  <div style={{ 
+                    width: '20px', 
+                    height: '20px', 
+                    border: `2px solid ${styles.colors.border}`,
+                    borderTop: `2px solid ${styles.colors.primary}`,
+                    borderRadius: '50%',
+                    marginRight: '10px',
+                    animation: 'spin 1s linear infinite'
+                  }} />
                   AI正在回复中...
                 </div>
               )}
             </div>
+            
+            {/* 消息输入区域 - AI Elements PromptInput 风格 */}
+            <div style={{ 
+              padding: '16px 20px', 
+              borderTop: `1px solid ${styles.colors.border}`,
+              backgroundColor: styles.colors.white
+            }}>
+              <div style={{ 
+                position: 'relative',
+                width: '100%',
+                backgroundColor: styles.colors.background,
+                borderRadius: '16px',
+                border: `1px solid ${styles.colors.border}`,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                transition: `all ${styles.transitions.fast}`,
+                overflow: 'hidden'
+              }}>
+                <textarea
+                  placeholder="输入消息..."
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  disabled={currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated}
+                  style={{
+                    width: '100%',
+                    resize: 'none',
+                    minHeight: '52px',
+                    maxHeight: '200px',
+                    padding: '16px 56px 16px 20px',
+                    border: 'none',
+                    fontSize: '15px',
+                    lineHeight: '1.5',
+                    backgroundColor: 'transparent',
+                    color: styles.colors.secondary,
+                    opacity: currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated ? 0.6 : 1,
+                    cursor: currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated ? 'not-allowed' : 'text',
+                    outline: 'none',
+                    fontFamily: 'inherit',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none',
+                    appearance: 'none',
+                    boxShadow: 'none'
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.shiftKey) {
+                      // 按住 Shift 键换行
+                    } else if (e.key === 'Enter') {
+                      // 直接发送消息
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                />
+                <button 
+                  onClick={sendMessage} 
+                  disabled={currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading || !isAuthenticated}
+                  style={{
+                    position: 'absolute',
+                    bottom: '10px',
+                    right: '10px',
+                    backgroundColor: isAuthenticated && messageInput.trim() ? styles.colors.primary : '#e0e0e0',
+                    color: styles.colors.white,
+                    border: 'none',
+                    padding: '0',
+                    borderRadius: '50%',
+                    width: '32px',
+                    height: '32px',
+                    cursor: (currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading || !isAuthenticated) ? 'not-allowed' : 'pointer',
+                    transition: `all ${styles.transitions.fast}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: isAuthenticated && messageInput.trim() ? '0 2px 8px rgba(0, 161, 214, 0.3)' : 'none'
+                  }}
+                  onMouseOver={(e) => {
+                    if (isAuthenticated && !isLoading && currentChatRoom.ais.length >= 2 && messageInput.trim()) {
+                      e.currentTarget.style.backgroundColor = styles.colors.primaryHover;
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.backgroundColor = isAuthenticated && messageInput.trim() ? styles.colors.primary : '#e0e0e0';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  {isLoading ? (
+                    <div style={{ 
+                      width: '14px', 
+                      height: '14px', 
+                      border: `2px solid ${styles.colors.white}`,
+                      borderTop: `2px solid transparent`,
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 2L11 13"></path>
+                      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                  )}
+                </button>
+              </div>
+              {currentChatRoom.ais.length < 2 && (
+                <p style={{ 
+                  marginTop: '8px', 
+                  fontSize: '12px', 
+                  color: styles.colors.secondaryLighter,
+                  marginBottom: 0,
+                  paddingLeft: '4px'
+                }}>请至少添加两个AI模型才能开始聊天</p>
+              )}
+              {!isAuthenticated && (
+                <p style={{ 
+                  marginTop: '8px', 
+                  fontSize: '12px', 
+                  color: styles.colors.secondaryLighter,
+                  marginBottom: 0,
+                  paddingLeft: '4px'
+                }}>请登录后才能发送消息</p>
+              )}
+            </div>
           </div>
-
-          <div className="chat-input">
-            <textarea
-              placeholder="输入消息..."
-              value={messageInput}
-              onChange={(e) => setMessageInput(e.target.value)}
-              disabled={currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated}
-              style={{
-                opacity: currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated ? 0.6 : 1,
-                cursor: currentChatRoom.ais.length < 2 || isLoading || !isAuthenticated ? 'not-allowed' : 'text'
-              }}
-            />
-            <button 
-              onClick={sendMessage} 
-              disabled={currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading || !isAuthenticated}
-              style={{
-                backgroundColor: isAuthenticated ? '#00a1d6' : '#999',
-                color: 'white',
-                border: 'none',
-                padding: '10px 20px',
-                borderRadius: '4px',
-                fontSize: '14px',
-                opacity: (currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading) ? 0.6 : 1,
-                cursor: (currentChatRoom.ais.length < 2 || !messageInput.trim() || isLoading || !isAuthenticated) ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseOver={(e) => {
-                if (isAuthenticated && !isLoading && currentChatRoom.ais.length >= 2 && messageInput.trim()) {
-                  e.currentTarget.style.backgroundColor = '#00b5e5';
-                }
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.backgroundColor = isAuthenticated ? '#00a1d6' : '#999';
-              }}
-            >
-              {isLoading ? '发送中...' : '发送'}
-            </button>
-          </div>
-          {currentChatRoom.ais.length < 2 && (
-            <p style={{ marginTop: '10px', color: '#999', fontSize: '12px' }}>
-              请至少添加两个AI模型才能开始聊天
-            </p>
-          )}
-          {!isAuthenticated && (
-            <p style={{ marginTop: '10px', color: '#999', fontSize: '12px' }}>
-              请登录后才能发送消息
-            </p>
-          )}
         </div>
       </div>
     );

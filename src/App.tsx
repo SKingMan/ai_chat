@@ -1271,13 +1271,13 @@ function App() {
           }}>
 
             <div style={{ position: 'relative' }}>
-              {/* 标签容器 - 两行显示 */}
+              {/* 标签容器 - 两行显示，每行14个标签 */}
               <div style={{ 
                 display: 'flex', 
                 flexWrap: 'wrap', 
                 gap: '12px', 
-                maxHeight: '80px',
                 alignContent: 'flex-start',
+                maxWidth: '100%',
               }}>
                 {/* 全部标签 */}
                 <button 
@@ -1312,25 +1312,10 @@ function App() {
                 >
                   全部
                 </button>
-                {/* 一级标签 - 动态计算显示数量 */}
+                {/* 一级标签 - 固定显示数量，确保第二行包含更多标签 */}
                 {(() => {
-                  // 计算可见标签数量
-                  const containerWidth = window.innerWidth;
-                  const maxContainerWidth = 1200; // 与页面最大宽度一致
-                  const actualContainerWidth = Math.min(containerWidth - 48, maxContainerWidth); // 减去左右padding
-                  
-                  // 估算每个标签的宽度（包括padding和gap）
-                  const tagWidth = 100; // 估算值，实际会根据内容调整
-                  const gapWidth = 12;
-                  
-                  // 计算每行最多能显示的标签数
-                  const tagsPerRow = Math.floor((actualContainerWidth) / (tagWidth + gapWidth));
-                  
-                  // 计算两行最多能显示的标签数
-                  const maxVisibleTags = tagsPerRow * 2 - 1; // 减去"全部"标签
-                  
-                  // 确保至少显示一些标签
-                  const visibleTagCount = Math.max(10, maxVisibleTags);
+                  // 固定显示的标签数量（两行，每行14个标签，包括"全部"和"更多"标签）
+                  const visibleTagCount = 26; // 14*2 - 2（减去"全部"标签，为"更多"标签留出位置）
                   
                   return (
                     <>
@@ -1383,7 +1368,7 @@ function App() {
                             let dropdownElement: HTMLElement | null = null;
                             let buttonElement: HTMLElement | null = null;
                             let mouseEnterCount = 0;
-                            let hideTimeout: NodeJS.Timeout | null = null;
+                            let hideTimeout: ReturnType<typeof setTimeout> | null = null;
                             
                             const showDropdown = () => {
                               if (hideTimeout) {
@@ -2069,7 +2054,7 @@ function App() {
                             borderRadius: '50%',
                             objectFit: 'cover',
                             marginRight: '12px',
-                            border: `2px solid ${getAgentColor(sender.id || '0')}`,
+                            border: `2px solid ${getAgentColor((sender as any).id || '0')}`,
                             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
                           }} />
                         </div>
@@ -2084,7 +2069,7 @@ function App() {
                           <span style={{ 
                             fontWeight: '600', 
                             fontSize: '14px',
-                            color: sender.isUser ? styles.colors.primary : getAgentColor(sender.id || '0'),
+                            color: sender.isUser ? styles.colors.primary : getAgentColor((sender as any).id || '0'),
                             marginRight: sender.isUser ? 0 : '10px',
                             textShadow: '0 1px 2px rgba(0, 0, 0, 0.1)'
                           }}>{sender.name}</span>

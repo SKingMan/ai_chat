@@ -480,7 +480,8 @@ function App() {
   const [aiName, setAiName] = useState('');
   const [aiPrompt, setAiPrompt] = useState(''); // AI角色设定提示词
   const [isLoading, setIsLoading] = useState(false);
-  const [chatRounds, setChatRounds] = useState(5); // 默认聊天轮数
+  // 从环境变量读取AI回答轮数，默认为5
+  const [chatRounds, setChatRounds] = useState(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5);
   const [showAgentList, setShowAgentList] = useState(true); // 控制Agent列表的显示/隐藏（移动端）
   
   // 聊天消息容器的ref，用于自动滚动
@@ -693,29 +694,37 @@ function App() {
       const data = await response.json();
       
       if (data.success) {
-        // 使用从数据库加载的数据
+        // 使用从数据库加载的数据，但使用环境变量中的轮数设置
         const loadedRoom: ChatRoom = {
           id: data.chatRoom.id,
           name: data.chatRoom.name,
           createdAt: data.chatRoom.createdAt,
-          chatRounds: data.chatRoom.chatRounds,
+          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5, // 使用环境变量中的轮数
           tags: data.chatRoom.tags || [],
           primaryTag: data.chatRoom.primaryTag || '生活',
           ais: data.chatRoom.ais,
           messages: data.chatRoom.messages,
         };
         setCurrentChatRoom(loadedRoom);
-        setChatRounds(loadedRoom.chatRounds);
+        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5); // 更新状态为环境变量中的轮数
       } else {
-        // 如果加载失败，使用本地数据
-        setCurrentChatRoom(room);
-        setChatRounds(room.chatRounds);
+        // 如果加载失败，使用本地数据，但使用环境变量中的轮数设置
+        const updatedRoom = {
+          ...room,
+          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5 // 使用环境变量中的轮数
+        };
+        setCurrentChatRoom(updatedRoom);
+        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5); // 更新状态为环境变量中的轮数
       }
     } catch (error) {
       console.error('Error loading chat room details:', error);
-      // 如果加载失败，使用本地数据
-      setCurrentChatRoom(room);
-      setChatRounds(room.chatRounds);
+      // 如果加载失败，使用本地数据，但使用环境变量中的轮数设置
+      const updatedRoom = {
+        ...room,
+        chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5 // 使用环境变量中的轮数
+      };
+      setCurrentChatRoom(updatedRoom);
+      setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5); // 更新状态为环境变量中的轮数
     }
     setCurrentPage('chat');
   };
@@ -1177,7 +1186,7 @@ function App() {
                       <line x1="12" y1="5" x2="12" y2="19"></line>
                       <line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
-                    创建聊天室
+                    创建
                   </button>
                   <button 
                     onClick={logout} 
@@ -1785,11 +1794,11 @@ function App() {
           }} className="mobile-agent-list">
             {/* 左侧头部 */}
             <div style={{ 
-              padding: '20px', 
+              padding: '16px', 
               borderBottom: `1px solid ${styles.colors.border}`,
               backgroundColor: styles.colors.white
             }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: '12px' }}>
                 <button 
                   onClick={goBackHome}
                   style={{
@@ -1815,16 +1824,10 @@ function App() {
               </div>
               
               {/* 添加 AI 表单 */}
-              <div style={{ marginBottom: '16px' }}>
-                <h3 style={{ 
-                  margin: '0 0 12px 0', 
-                  fontSize: '14px', 
-                  color: styles.colors.secondary,
-                  fontWeight: '600'
-                }}>添加AI</h3>
+              <div style={{ marginBottom: '12px' }}>
                 {isAuthenticated ? (
                   <>
-                    <div style={{ marginBottom: '8px' }}>
+                    <div style={{ marginBottom: '6px' }}>
                       <input
                         type="text"
                         placeholder="输入AI名称"
@@ -1839,14 +1842,14 @@ function App() {
                         }}
                       />
                     </div>
-                    <div style={{ marginBottom: '12px' }}>
+                    <div style={{ marginBottom: '8px' }}>
                       <textarea
                         placeholder="输入AI角色设定提示词"
                         value={aiPrompt}
                         onChange={(e) => setAiPrompt(e.target.value)}
                         style={{
                           width: '100%',
-                          height: '60px',
+                          height: '40px',
                           padding: '8px 12px',
                           border: `1px solid ${styles.colors.border}`,
                           borderRadius: styles.borderRadius.small,
@@ -1885,35 +1888,30 @@ function App() {
               </div>
               
               {/* 聊天设置 */}
-              <div style={{ marginBottom: '16px' }}>
+              <div style={{ marginBottom: '12px' }}>
                 <h3 style={{ 
-                  margin: '0 0 12px 0', 
+                  margin: '0 0 8px 0', 
                   fontSize: '14px', 
                   color: styles.colors.secondary,
                   fontWeight: '600'
                 }}>聊天设置</h3>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <label style={{ fontSize: '13px', color: styles.colors.secondaryLight, whiteSpace: 'nowrap' }}>聊天轮数：</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={currentChatRoom.chatRounds}
-                    onChange={updateChatRounds}
-                    style={{
-                      width: '50px',
-                      padding: '6px 8px',
-                      border: `1px solid ${styles.colors.border}`,
-                      borderRadius: styles.borderRadius.small,
-                      fontSize: '13px'
-                    }}
-                  />
+                  <span style={{
+                    width: '50px',
+                    padding: '6px 8px',
+                    border: `1px solid ${styles.colors.border}`,
+                    borderRadius: styles.borderRadius.small,
+                    fontSize: '13px',
+                    backgroundColor: styles.colors.white,
+                    color: styles.colors.secondary
+                  }}>{currentChatRoom.chatRounds}</span>
                 </div>
               </div>
             </div>
             
             {/* Agent 列表 */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+            <div style={{ flex: 2, overflowY: 'auto', padding: '16px' }}>
               <h3 style={{ 
                 margin: '0 0 16px 0', 
                 fontSize: '14px', 

@@ -481,7 +481,10 @@ function App() {
   const [aiPrompt, setAiPrompt] = useState(''); // AI角色设定提示词
   const [isLoading, setIsLoading] = useState(false);
   // 从环境变量读取AI回答轮数，默认为5
-  const [chatRounds, setChatRounds] = useState(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5);
+  const [chatRounds, setChatRounds] = useState<number>(() => {
+    const rounds = parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS);
+    return isNaN(rounds) ? 5 : rounds;
+  });
   const [showAgentList, setShowAgentList] = useState(true); // 控制Agent列表的显示/隐藏（移动端）
   
   // 聊天消息容器的ref，用于自动滚动

@@ -2,6 +2,10 @@
 
 一个Web端的AI聊天室应用，允许用户创建包含多个AI模型的聊天群组，让不同的AI之间进行对话交流。
 
+在线体验地址：<https://chatroom80.netlify.app/>
+
+<br />
+
 ## 功能特性
 
 - **多AI群聊**：支持添加多个AI模型到聊天室，让它们在群里对话
@@ -14,11 +18,13 @@
 ## 技术栈
 
 ### 前端
+
 - React + TypeScript
 - Vite
 - CSS3
 
 ### 后端服务（无）
+
 - 直接使用Supabase作为后端服务
 - 使用Supabase Edge Functions调用DeepSeek API
 
@@ -29,12 +35,10 @@
    git clone https://github.com/your-username/ai-chat-room.git
    cd ai_chat
    ```
-
 2. **安装依赖**
    ```bash
    npm install
    ```
-
 3. **配置环境变量**
    创建或编辑 `.env` 文件，添加以下内容：
    ```env
@@ -45,7 +49,6 @@
    VITE_SUPABASE_URL=你的Supabase项目URL
    VITE_SUPABASE_ANON_KEY=你的SupabaseAnonKey
    ```
-
 4. **配置Supabase**
    - 在Supabase中创建数据库表（参考 `supabase_schema.sql`）
    - 部署Edge Function（参考 `supabase-functions/` 目录）
@@ -57,19 +60,17 @@
 npm run dev
 ```
 
-前端应用将运行在 http://localhost:5173
+前端应用将运行在 <http://localhost:5173>
 
 ## 使用指南
 
 1. **创建聊天室**
    - 在主页输入聊天室名称
    - 点击"创建聊天室"按钮
-
 2. **发送消息**
    - 在聊天输入框中输入您的消息
    - 点击"发送"按钮
    - 观察AI之间的多轮对话
-
 3. **添加自定义AI**
    - 在聊天室页面输入AI名称
    - 输入AI角色设定提示词

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { chatRooms as chatRoomsApi, messages, users, deepseekFetch } from './supabase';
+import { chatRooms as chatRoomsApi, messages, users, deepseekFetch, aiConfigs } from './supabase';
 import { presetAIs } from './aiPresets';
 
 // CSS变量定义
@@ -511,17 +511,32 @@ function App() {
     const loadChatRooms = async () => {
       try {
         const rooms = await chatRoomsApi.getAll();
-        const formattedRooms: ChatRoom[] = rooms.map(room => ({
-          id: room.id,
-          name: room.name,
-          createdAt: room.created_at,
-          chatRounds: room.chat_rounds,
-          tags: room.tags || [],
-          primaryTag: room.primary_tag || '生活',
-          ais: [...presetAIs],
-          messages: []
-        }));
-        setChatRooms(formattedRooms);
+        
+        // 获取所有聊天室的用户添加AI
+        const roomsWithAIs = await Promise.all(
+          rooms.map(async (room) => {
+            const userAIs = await aiConfigs.getByChatRoomId(room.id);
+            return {
+              id: room.id,
+              name: room.name,
+              createdAt: room.created_at,
+              chatRounds: room.chat_rounds,
+              tags: room.tags || [],
+              primaryTag: room.primary_tag || '生活',
+              ais: [...presetAIs, ...userAIs.map(ai => ({
+                id: ai.id,
+                name: ai.name,
+                model: ai.model,
+                avatar: ai.avatar || '',
+                provider: ai.provider,
+                prompt: ai.prompt
+              }))],
+              messages: []
+            };
+          })
+        );
+        
+        setChatRooms(roomsWithAIs);
       } catch (error) {
         console.error('Error loading chat rooms:', error);
       }
@@ -572,7 +587,8 @@ function App() {
       setNewRoomName('');
     } catch (error) {
       console.error('Error creating chat room:', error);
-      alert('创建聊天室失败: ' + (error as Error).message);
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      alert('创建聊天室失败: ' + errorMessage);
       // 即使API调用失败，也允许本地创建聊天室
       setChatRooms([...chatRooms, newRoom]);
       setCurrentChatRoom(newRoom);
@@ -650,6 +666,21 @@ function App() {
       provider: 'DeepSeek',
       prompt: aiPrompt || `你是${aiName}，一个智能AI助手。`,
     };
+
+    // 保存到数据库
+    try {
+      await aiConfigs.create({
+        id: newAI.id,
+        chat_room_id: currentChatRoom.id,
+        name: newAI.name,
+        model: newAI.model,
+        avatar: newAI.avatar,
+        provider: newAI.provider,
+        prompt: newAI.prompt
+      });
+    } catch (error) {
+      console.error('Error saving AI to database:', error);
+    }
 
     const updatedRoom = {
       ...currentChatRoom,

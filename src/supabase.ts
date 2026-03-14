@@ -1,10 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables')
+  console.error('Missing Supabase environment variables:', { 
+    hasUrl: !!supabaseUrl, 
+    hasKey: !!supabaseAnonKey 
+  })
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -68,7 +71,16 @@ export const chatRooms = {
   },
 
   async create(room: Omit<ChatRoom, 'created_at' | 'chat_rounds'> & { createdAt: string; chatRounds?: number }): Promise<void> {
-    const { error } = await supabase.from('chat_rooms').insert([{
+    console.log('Creating chat room:', {
+      id: room.id,
+      name: room.name,
+      created_at: room.createdAt,
+      chat_rounds: room.chatRounds || 5,
+      tags: JSON.stringify(room.tags || []),
+      primary_tag: room.primary_tag
+    });
+    
+    const { error, data } = await supabase.from('chat_rooms').insert([{
       id: room.id,
       name: room.name,
       created_at: room.createdAt,
@@ -77,6 +89,7 @@ export const chatRooms = {
       primary_tag: room.primary_tag
     }])
     
+    console.log('Create result:', { error, data });
     if (error) throw error
   }
 }

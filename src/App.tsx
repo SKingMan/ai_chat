@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, chatRooms as chatRoomsApi, messages, users, deepseek, deepseekFetch } from './supabase';
+import { chatRooms as chatRoomsApi, messages, users, deepseekFetch } from './supabase';
 import { presetAIs } from './aiPresets';
 
 // CSS变量定义
@@ -482,7 +482,7 @@ function App() {
   const [aiName, setAiName] = useState('');
   const [aiPrompt, setAiPrompt] = useState(''); // AI角色设定提示词
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingChatRoom, setIsLoadingChatRoom] = useState(false);
+  const [, setIsLoadingChatRoom] = useState(false);
   // 从环境变量读取AI回答轮数，默认为5
   const [chatRounds, setChatRounds] = useState<number>(() => {
     const rounds = parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS);
@@ -530,22 +530,6 @@ function App() {
     loadChatRooms();
   }, []);
 
-  // 生成标签的函数
-  const generateTags = async (roomName: string): Promise<string[]> => {
-    try {
-      console.log('Generating tags for room:', roomName);
-      
-      const tags = await deepseekFetch.generateTags(roomName);
-      console.log('Generated tags:', tags);
-      return tags;
-    } catch (error) {
-      console.error('Error generating tags:', error);
-    }
-    
-    // 默认标签
-    return ['通用'];
-  };
-
   // 创建新聊天室
   const createChatRoom = async (roomName?: string) => {
     const nameToUse = roomName || newRoomName;
@@ -579,7 +563,7 @@ function App() {
         createdAt: newRoom.createdAt,
         chatRounds: newRoom.chatRounds,
         tags: newRoom.tags,
-        primaryTag: newRoom.primaryTag
+        primary_tag: newRoom.primaryTag
       });
 
       setChatRooms([...chatRooms, newRoom]);
@@ -742,7 +726,7 @@ function App() {
     setAuthError('');
 
     try {
-      const result = await users.login(username, password);
+      await users.login(username, password);
       setIsAuthenticated(true);
       setCurrentPage('home');
       localStorage.setItem('isAuthenticated', 'true');
@@ -903,21 +887,6 @@ function App() {
   const goBackHome = () => {
     setCurrentPage('home');
     setCurrentChatRoom(null);
-  };
-
-  // 更新聊天轮数
-  const updateChatRounds = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rounds = parseInt(e.target.value) || 1;
-    setChatRounds(Math.min(Math.max(1, rounds), 10)); // 限制在1-10轮之间
-
-    if (currentChatRoom) {
-      const updatedRoom = {
-        ...currentChatRoom,
-        chatRounds: Math.min(Math.max(1, rounds), 10),
-      };
-      setCurrentChatRoom(updatedRoom);
-      setChatRooms(chatRooms.map(room => room.id === currentChatRoom.id ? updatedRoom : room));
-    }
   };
 
   // 检查登录状态

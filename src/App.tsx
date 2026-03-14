@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { supabase, chatRooms as chatRoomsApi, messages, users, deepseek, deepseekFetch } from './supabase';
-import { presetAIs } from './aiPresets';
 
 // CSS变量定义
 const styles = {
@@ -482,7 +480,6 @@ function App() {
   const [aiName, setAiName] = useState('');
   const [aiPrompt, setAiPrompt] = useState(''); // AI角色设定提示词
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingChatRoom, setIsLoadingChatRoom] = useState(false);
   // 从环境变量读取AI回答轮数，默认为5
   const [chatRounds, setChatRounds] = useState<number>(() => {
     const rounds = parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS);
@@ -510,18 +507,22 @@ function App() {
   React.useEffect(() => {
     const loadChatRooms = async () => {
       try {
-        const rooms = await chatRoomsApi.getAll();
-        const formattedRooms: ChatRoom[] = rooms.map(room => ({
-          id: room.id,
-          name: room.name,
-          createdAt: room.created_at,
-          chatRounds: room.chat_rounds,
-          tags: room.tags || [],
-          primaryTag: room.primary_tag || '生活',
-          ais: [...presetAIs],
-          messages: []
-        }));
-        setChatRooms(formattedRooms);
+        const response = await fetch('http://localhost:3001/api/chatrooms');
+        const data = await response.json();
+        if (data.success) {
+          // 转换数据格式以匹配前端类型定义
+          const rooms: ChatRoom[] = data.chatRooms.map((room: any) => ({
+            id: room.id,
+            name: room.name,
+            createdAt: room.created_at,
+            chatRounds: room.chat_rounds,
+            tags: room.tags ? room.tags : [],
+            primaryTag: room.primary_tag || room.primaryTag || '生活',
+            ais: [], // 进入聊天室时再加载
+            messages: [] // 进入聊天室时再加载
+          }));
+          setChatRooms(rooms);
+        }
       } catch (error) {
         console.error('Error loading chat rooms:', error);
       }
@@ -535,9 +536,39 @@ function App() {
     try {
       console.log('Generating tags for room:', roomName);
       
-      const tags = await deepseekFetch.generateTags(roomName);
-      console.log('Generated tags:', tags);
-      return tags;
+      // 使用DeepSeek API生成标签
+      const response = await fetch('http://localhost:3001/api/deepseek/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: 'system',
+              content: '你是一个标签生成器，根据聊天室名称生成3-5个相关的标签。标签应该简洁，1-3个词，用逗号分隔。不要包含任何解释，只返回标签。',
+            },
+            {
+              role: 'user',
+              content: `为聊天室名称"${roomName}"生成标签`,
+            },
+          ],
+        }),
+      });
+      
+      const data = await response.json();
+      console.log('Tag generation API response:', data);
+      
+      if (data.success && data.reply) {
+        // 解析标签
+        const tags = data.reply
+          .split(',')
+          .map((tag: string) => tag.trim())
+          .filter((tag: string) => tag.length > 0)
+          .slice(0, 5); // 最多5个标签
+        console.log('Generated tags:', tags);
+        return tags;
+      }
     } catch (error) {
       console.error('Error generating tags:', error);
     }
@@ -551,11 +582,13 @@ function App() {
     const nameToUse = roomName || newRoomName;
     if (!nameToUse.trim()) return;
 
-    // 自动分类标签（本地计算，不需要远程API）
+    // 自动分类标签
     const { primaryTag, secondaryTags } = autoCategorizeTags(nameToUse);
     
-    // 直接使用自动分类的标签，不再调用远程API
-    const combinedTags = secondaryTags;
+    // 生成标签
+    const tags = await generateTags(nameToUse);
+    // 合并自动分类的二级标签和生成的标签
+    const combinedTags = [...new Set([...secondaryTags, ...tags])];
 
     const newRoom: ChatRoom = {
       id: Date.now().toString(),
@@ -568,19 +601,78 @@ function App() {
       primaryTag: primaryTag,
     };
 
+    // 自动添加预设的AI角色
+    const presetAIs = [
+      {
+        id: (Date.now() + 1).toString(),
+        name: '赛博阿呆',
+        model: 'deepseek-chat',
+        avatar: `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=cyberpunk%20tech%20enthusiast%20avatar&image_size=square`,
+        provider: 'DeepSeek',
+        prompt: '你是一个科技畅想者，对未来科技充满了期待，对于未来科技充满了好奇与期待，期望AGI快点到了，你完全不担心科技会对人民有坏的影响，是一个坚定的科技拥护者。',
+      },
+      {
+        id: (Date.now() + 2).toString(),
+        name: '远古小春子',
+        model: 'deepseek-chat',
+        avatar: `https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=traditional%20rural%20person%20avatar&image_size=square`,
+        provider: 'DeepSeek',
+        prompt: '你是一个保守的人，害怕变化，希望一直保持着现在的生活，每天放牛，吃饭，长大结婚，生小孩，孩子依然放牛。你对未来科技始终保持谨慎态度。',
+      },
+    ];
+
     // 添加预设AI到聊天室
-    newRoom.ais = [...presetAIs];
+    newRoom.ais = presetAIs;
 
     try {
-      // 保存聊天室到数据库
-      await chatRoomsApi.create({
-        id: newRoom.id,
-        name: newRoom.name,
-        createdAt: newRoom.createdAt,
-        chatRounds: newRoom.chatRounds,
-        tags: newRoom.tags,
-        primaryTag: newRoom.primaryTag
+      // 保存到数据库
+      const chatRoomResponse = await fetch('http://localhost:3001/api/chatrooms', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: newRoom.id,
+          name: newRoom.name,
+          createdAt: newRoom.createdAt,
+          chatRounds: newRoom.chatRounds,
+          tags: newRoom.tags,
+          primaryTag: newRoom.primaryTag,
+        }),
       });
+
+      const chatRoomData = await chatRoomResponse.json();
+      if (!chatRoomData.success) {
+        console.error('Error creating chat room:', chatRoomData.error);
+        alert('创建聊天室失败: ' + chatRoomData.error);
+        return;
+      }
+
+      // 保存预设AI到数据库
+      for (const ai of presetAIs) {
+        const aiResponse = await fetch('http://localhost:3001/api/ai-configs', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            id: ai.id,
+            chatRoomId: newRoom.id,
+            name: ai.name,
+            model: ai.model,
+            avatar: ai.avatar,
+            provider: ai.provider,
+            prompt: ai.prompt,
+          }),
+        });
+
+        const aiData = await aiResponse.json();
+        if (!aiData.success) {
+          console.error('Error saving AI config:', aiData.error);
+          alert('保存AI配置失败: ' + aiData.error);
+          return;
+        }
+      }
 
       setChatRooms([...chatRooms, newRoom]);
       setCurrentChatRoom(newRoom);
@@ -599,59 +691,45 @@ function App() {
 
   // 进入现有聊天室
   const enterChatRoom = async (room: ChatRoom) => {
-    setIsLoadingChatRoom(true);
     try {
       // 从数据库加载聊天室详情
-      const loadedRoom = await chatRoomsApi.getById(room.id);
+      const response = await fetch(`http://localhost:3001/api/chatrooms/${room.id}`);
+      const data = await response.json();
       
-      if (loadedRoom) {
-        // 加载消息
-        const msgs = await messages.getByChatRoomId(room.id);
-        
-        // 始终使用预设AI（不需要从数据库加载）
-        const ais = [...presetAIs];
-        console.log('EnterChatRoom - presetAIs:', ais);
-        
-        const formattedRoom: ChatRoom = {
-          id: loadedRoom.id,
-          name: loadedRoom.name,
-          createdAt: loadedRoom.created_at,
-          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5,
-          tags: loadedRoom.tags || [],
-          primaryTag: loadedRoom.primary_tag || '生活',
-          ais: ais,
-          messages: msgs.map(msg => ({
-            id: msg.id,
-            senderId: msg.sender_id,
-            senderType: msg.sender_type as 'user' | 'ai',
-            content: msg.content,
-            timestamp: msg.timestamp
-          }))
+      if (data.success) {
+        // 使用从数据库加载的数据，但使用环境变量中的轮数设置
+        const loadedRoom: ChatRoom = {
+          id: data.chatRoom.id,
+          name: data.chatRoom.name,
+          createdAt: data.chatRoom.createdAt,
+          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5, // 使用环境变量中的轮数
+          tags: data.chatRoom.tags || [],
+          primaryTag: data.chatRoom.primaryTag || '生活',
+          ais: data.chatRoom.ais,
+          messages: data.chatRoom.messages,
         };
-        setCurrentChatRoom(formattedRoom);
-        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5);
+        setCurrentChatRoom(loadedRoom);
+        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5); // 更新状态为环境变量中的轮数
       } else {
-        // 如果加载失败，使用本地数据
+        // 如果加载失败，使用本地数据，但使用环境变量中的轮数设置
         const updatedRoom = {
           ...room,
-          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5,
-          ais: [...presetAIs]
+          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5 // 使用环境变量中的轮数
         };
         setCurrentChatRoom(updatedRoom);
-        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5);
+        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5); // 更新状态为环境变量中的轮数
       }
     } catch (error) {
       console.error('Error loading chat room details:', error);
+      // 如果加载失败，使用本地数据，但使用环境变量中的轮数设置
       const updatedRoom = {
         ...room,
-        chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5,
-        ais: [...presetAIs]
+        chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5 // 使用环境变量中的轮数
       };
       setCurrentChatRoom(updatedRoom);
-      setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5);
+      setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5); // 更新状态为环境变量中的轮数
     }
     setCurrentPage('chat');
-    setIsLoadingChatRoom(false);
   };
 
   // 添加AI到聊天室
@@ -671,6 +749,27 @@ function App() {
       ...currentChatRoom,
       ais: [...currentChatRoom.ais, newAI],
     };
+
+    try {
+      // 保存到数据库
+      await fetch('http://localhost:3001/api/ai-configs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: newAI.id,
+          chatRoomId: currentChatRoom.id,
+          name: newAI.name,
+          model: newAI.model,
+          avatar: newAI.avatar,
+          provider: newAI.provider,
+          prompt: newAI.prompt,
+        }),
+      });
+    } catch (error) {
+      console.error('Error saving AI config:', error);
+    }
 
     setCurrentChatRoom(updatedRoom);
     setChatRooms(chatRooms.map(room => room.id === currentChatRoom.id ? updatedRoom : room));
@@ -713,14 +812,28 @@ function App() {
       messages.push({ role: 'user', content: message });
       console.log('Messages to API:', JSON.stringify(messages, null, 2));
 
-      console.log('Making API call to Supabase Edge Function...');
-      try {
-        const reply = await deepseekFetch.chat(messages);
-        console.log('API Call Success, Reply:', reply);
-        return reply;
-      } catch (error) {
-        console.error('API Call Failed, Error:', error);
-        console.error('Error details:', JSON.stringify(error));
+      console.log('Making API call to http://localhost:3001/api/deepseek/chat...');
+      const response = await fetch('http://localhost:3001/api/deepseek/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages,
+        }),
+      });
+
+      console.log('API Response Status:', response.status);
+      console.log('API Response Status Text:', response.statusText);
+      
+      const data = await response.json();
+      console.log('API Response Data:', JSON.stringify(data, null, 2));
+      
+      if (data.success) {
+        console.log('API Call Success, Reply:', data.reply);
+        return data.reply;
+      } else {
+        console.error('API Call Failed, Error:', data.error);
         return `我是${aiName}，这是一个默认回复。你刚才说：${message}`;
       }
     } catch (error) {
@@ -742,13 +855,27 @@ function App() {
     setAuthError('');
 
     try {
-      const result = await users.login(username, password);
-      setIsAuthenticated(true);
-      setCurrentPage('home');
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('username', username);
+      const response = await fetch('http://localhost:3001/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setIsAuthenticated(true);
+        setCurrentPage('home');
+        // 保存登录状态到localStorage
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('username', username);
+      } else {
+        setAuthError(data.error || '登录失败');
+      }
     } catch (error) {
-      setAuthError((error as Error).message || '登录失败');
+      console.error('Error logging in:', error);
+      setAuthError('登录失败，请稍后重试');
     } finally {
       setAuthLoading(false);
     }
@@ -765,13 +892,28 @@ function App() {
     setAuthError('');
 
     try {
-      await users.register(registerUsername, registerPassword);
-      setIsAuthenticated(true);
-      setCurrentPage('home');
-      localStorage.setItem('isAuthenticated', 'true');
-      localStorage.setItem('username', registerUsername);
+      const response = await fetch('http://localhost:3001/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username: registerUsername, password: registerPassword }),
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // 注册成功后自动登录
+        setIsAuthenticated(true);
+        setCurrentPage('home');
+        // 保存登录状态到localStorage
+        localStorage.setItem('isAuthenticated', 'true');
+        localStorage.setItem('username', registerUsername);
+      } else {
+        setAuthError(data.error || '注册失败');
+      }
     } catch (error) {
-      setAuthError((error as Error).message || '注册失败');
+      console.error('Error registering:', error);
+      setAuthError('注册失败，请稍后重试');
     } finally {
       setAuthLoading(false);
     }
@@ -803,13 +945,19 @@ function App() {
 
     // 保存用户消息到数据库
     try {
-      await messages.create({
-        id: userMessage.id,
-        chat_room_id: currentChatRoom.id,
-        sender_id: userMessage.senderId,
-        sender_type: userMessage.senderType,
-        content: userMessage.content,
-        timestamp: userMessage.timestamp
+      await fetch('http://localhost:3001/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id: userMessage.id,
+          chatRoomId: currentChatRoom.id,
+          senderId: userMessage.senderId,
+          senderType: userMessage.senderType,
+          content: userMessage.content,
+          timestamp: userMessage.timestamp,
+        }),
       });
     } catch (error) {
       console.error('Error saving user message:', error);
@@ -862,13 +1010,19 @@ function App() {
 
           // 保存AI消息到数据库
           try {
-            await messages.create({
-              id: aiMessage.id,
-              chat_room_id: currentChatRoom.id,
-              sender_id: aiMessage.senderId,
-              sender_type: aiMessage.senderType,
-              content: aiMessage.content,
-              timestamp: aiMessage.timestamp
+            await fetch('http://localhost:3001/api/messages', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                id: aiMessage.id,
+                chatRoomId: currentChatRoom.id,
+                senderId: aiMessage.senderId,
+                senderType: aiMessage.senderType,
+                content: aiMessage.content,
+                timestamp: aiMessage.timestamp,
+              }),
             });
           } catch (error) {
             console.error('Error saving AI message:', error);
@@ -1872,37 +2026,19 @@ function App() {
                 </div>
               ) : (
                 currentChatRoom.messages.map(message => {
-                  console.log('Rendering message:', message);
-                  console.log('currentChatRoom.ais:', currentChatRoom.ais);
-                  
-                  let aiInfo;
-                  if (message.senderType === 'user') {
-                    aiInfo = { 
-                      name: '我', 
-                      avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=user%20avatar%20friendly%20person&image_size=square',
-                      isUser: true
-                    };
-                  } else {
-                    // 先按ID查找，再按名字查找
-                    aiInfo = currentChatRoom.ais.find(ai => ai.id === message.senderId);
-                    if (!aiInfo) {
-                      // 根据消息内容中的名字查找
-                      if (message.content.includes('赛博阿呆')) {
-                        aiInfo = currentChatRoom.ais.find(ai => ai.name === '赛博阿呆');
-                      } else if (message.content.includes('远古小春子')) {
-                        aiInfo = currentChatRoom.ais.find(ai => ai.name === '远古小春子');
+                  const sender = message.senderType === 'user' 
+                    ? { 
+                        name: '我', 
+                        avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=user%20avatar%20friendly%20person&image_size=square',
+                        isUser: true
                       }
-                    }
-                    if (!aiInfo) {
-                      aiInfo = { 
-                        name: 'AI', 
-                        avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=ai%20avatar&image_size=square'
+                    : {
+                        ...(currentChatRoom.ais.find(ai => ai.id === message.senderId) || { 
+                          name: 'AI', 
+                          avatar: 'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=ai%20avatar&image_size=square'
+                        }),
+                        isUser: false
                       };
-                    }
-                    aiInfo = { ...aiInfo, isUser: false };
-                  }
-                  
-                  const sender = aiInfo;
 
                   return (
                     <div key={message.id} style={{ 

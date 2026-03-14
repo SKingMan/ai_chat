@@ -9,7 +9,6 @@
 - **多轮对话**：可设置AI之间的对话轮数，控制对话长度
 - **创新回复**：AI回答具有创新性，避免重复，会抖机灵，有趣味性
 - **响应式设计**：适配不同屏幕尺寸，提供良好的用户体验
-- **数据持久化**：使用Supabase云数据库，聊天记录自动保存
 
 ## 技术栈
 
@@ -18,9 +17,10 @@
 - Vite
 - CSS3
 
-### 后端服务（无）
-- 直接使用Supabase作为后端服务
-- 使用Supabase Edge Functions调用DeepSeek API
+### 后端
+- Node.js + Express
+- DeepSeek API
+- Axios
 
 ## 安装步骤
 
@@ -30,76 +30,80 @@
    cd ai_chat
    ```
 
-2. **安装依赖**
+2. **安装前端依赖**
    ```bash
    npm install
    ```
 
-3. **配置环境变量**
-   创建或编辑 `.env` 文件，添加以下内容：
-   ```env
-   # AI对话轮数设置
-   VITE_AI_CHAT_ROUNDS=5
-
-   # Supabase配置
-   VITE_SUPABASE_URL=你的Supabase项目URL
-   VITE_SUPABASE_ANON_KEY=你的SupabaseAnonKey
+3. **安装后端依赖**
+   ```bash
+   cd backend
+   npm install
+   cd ..
    ```
 
-4. **配置Supabase**
-   - 在Supabase中创建数据库表（参考 `supabase_schema.sql`）
-   - 部署Edge Function（参考 `supabase-functions/` 目录）
-   - 在Supabase Dashboard中设置环境变量 `DEEPSEEK_API_KEY`
+4. **配置API密钥**
+   - 打开 `backend/.env` 文件
+   - 将 `your_deepseek_api_key_here` 替换为您的真实DeepSeek API密钥
 
 ## 启动项目
 
-```bash
-npm run dev
-```
+1. **启动后端服务**
+   ```bash
+   cd backend
+   npm run dev
+   # 后端服务将运行在 http://localhost:3001
+   ```
 
-前端应用将运行在 http://localhost:5173
+2. **启动前端应用**
+   ```bash
+   # 在另一个终端中运行
+   npm run dev
+   # 前端应用将运行在 http://localhost:5173
+   ```
+
+3. **访问应用**
+   打开浏览器，访问 http://localhost:5173 开始使用AI聊天室
 
 ## 使用指南
 
 1. **创建聊天室**
    - 在主页输入聊天室名称
+   - 设置聊天轮数（默认为5轮）
    - 点击"创建聊天室"按钮
 
-2. **发送消息**
+2. **添加AI模型**
+   - 在聊天室页面输入AI名称
+   - 输入AI角色设定提示词（例如："你是一个幽默的助手，擅长讲笑话"）
+   - 点击"添加"按钮
+   - 请至少添加两个AI模型，以便它们可以在群里对话
+
+3. **发送消息**
    - 在聊天输入框中输入您的消息
    - 点击"发送"按钮
    - 观察AI之间的多轮对话
 
-3. **添加自定义AI**
-   - 在聊天室页面输入AI名称
-   - 输入AI角色设定提示词
-   - 点击"添加"按钮
+4. **查看聊天记录**
+   - 聊天记录会显示在"聊天记录"区域
+   - 每条消息都会显示发送者的头像、名称和时间戳
 
 ## 项目结构
 
 ```
 ai-chat-room/
-├── src/                      # 前端代码
-│   ├── App.tsx              # 主应用组件
-│   ├── supabase.ts          # Supabase客户端
-│   ├── aiPresets.ts         # 预设AI配置
-│   └── main.tsx             # 应用入口
-├── supabase-functions/      # Edge Functions
-│   └── deepseek-chat/       # DeepSeek API调用函数
-├── supabase_schema.sql       # 数据库表结构
-├── .env                     # 环境变量配置
-├── package.json             # 依赖配置
-├── vite.config.ts           # Vite配置
-└── README.md                # 项目说明
+├── src/              # 前端代码
+│   ├── App.tsx       # 主应用组件
+│   ├── main.tsx      # 应用入口
+│   └── index.css     # 全局样式
+├── backend/          # 后端代码
+│   ├── index.js      # 后端主文件
+│   ├── package.json  # 后端依赖
+│   └── .env          # 环境变量配置
+├── package.json      # 前端依赖
+├── vite.config.ts    # Vite配置
+├── tsconfig.json     # TypeScript配置
+└── README.md         # 项目说明
 ```
-
-## 数据库表结构
-
-需要创建以下表（参考 `supabase_schema.sql`）：
-
-- `users` - 用户表
-- `chat_rooms` - 聊天室表
-- `messages` - 消息表
 
 ## 注意事项
 

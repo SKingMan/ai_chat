@@ -744,8 +744,24 @@ function App() {
 
       console.log('Making API call to Supabase Edge Function...');
       try {
-        const reply = await deepseekFetch.chat(messages);
+        let reply = await deepseekFetch.chat(messages);
         console.log('API Call Success, Reply:', reply);
+        
+        // 检查回复是否异常格式（如 "[AI名字] [AI名字]" 这种重复格式）
+        const isAbnormalFormat = (text: string): boolean => {
+          const match = text.match(/^\[([^\]]+)\]\s*\[([^\]]+)\]\s*$/);
+          if (match && match[1] === match[2]) {
+            return true;
+          }
+          return false;
+        };
+        
+        // 如果回复异常，重试一次
+        if (isAbnormalFormat(reply)) {
+          console.warn('Abnormal format detected, retrying...');
+          reply = await deepseekFetch.chat(messages);
+          console.log('Retry Success, Reply:', reply);
+        }
         
         // 安全检查：确保回复不是空或异常
         if (!reply || reply.trim() === '' || reply.length < 2) {

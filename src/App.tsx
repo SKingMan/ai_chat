@@ -608,15 +608,26 @@ function App() {
         // 加载消息
         const msgs = await messages.getByChatRoomId(room.id);
         
-        // 始终使用预设AI（不需要从数据库加载）
-        const ais = [...presetAIs];
-        console.log('EnterChatRoom - presetAIs:', ais);
+        // 加载用户添加的 AI
+        const userAIs = await aiConfigs.getByChatRoomId(room.id);
+        const userAIConfigs = userAIs.map(ai => ({
+          id: ai.id,
+          name: ai.name,
+          model: ai.model,
+          avatar: ai.avatar || '',
+          provider: ai.provider,
+          prompt: ai.prompt
+        }));
+        
+        // 合并预设 AI 和用户添加的 AI
+        const ais = [...presetAIs, ...userAIConfigs];
+        console.log('EnterChatRoom - All AIs:', ais);
         
         const formattedRoom: ChatRoom = {
           id: loadedRoom.id,
           name: loadedRoom.name,
           createdAt: loadedRoom.created_at,
-          chatRounds: parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5,
+          chatRounds: loadedRoom.chat_rounds || 5,
           tags: loadedRoom.tags || [],
           primaryTag: loadedRoom.primary_tag || '生活',
           ais: ais,
@@ -629,7 +640,7 @@ function App() {
           }))
         };
         setCurrentChatRoom(formattedRoom);
-        setChatRounds(parseInt(import.meta.env.VITE_AI_CHAT_ROUNDS) || 5);
+        setChatRounds(loadedRoom.chat_rounds || 5);
       } else {
         // 如果加载失败，使用本地数据
         const updatedRoom = {
@@ -701,6 +712,9 @@ function App() {
       console.log('AI Name:', aiName);
       console.log('AI Prompt:', aiPrompt);
       console.log('Context length:', context?.length || 0);
+      if (context && context.length > 0) {
+        console.log('Context messages:', JSON.stringify(context.slice(-2), null, 2));
+      }
       
       const systemPrompt = `${aiPrompt || `你是${aiName}，一个智能AI助手。`} 回答要简短，10-30字之间。要具有创新精神，会抖机灵，有趣一点，同时保持你的特色。避免重复之前的回答，尝试从不同角度思考问题。`;
       const messages = [
@@ -732,6 +746,13 @@ function App() {
       try {
         const reply = await deepseekFetch.chat(messages);
         console.log('API Call Success, Reply:', reply);
+        
+        // 安全检查：确保回复不是空或异常
+        if (!reply || reply.trim() === '' || reply.length < 2) {
+          console.warn('Empty or invalid reply received, using default');
+          return `我是${aiName}，不好意思，我需要组织一下语言。`;
+        }
+        
         return reply;
       } catch (error) {
         console.error('API Call Failed, Error:', error);

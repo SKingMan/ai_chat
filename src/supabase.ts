@@ -236,11 +236,17 @@ export const deepseek = {
 // 直接使用fetch调用Edge Function，绕过Supabase客户端的JWT验证
 export const deepseekFetch = {
   async chat(messages: { role: string; content: string }[]): Promise<string> {
-    const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/deepseek-chat`, {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+    
+    console.log('=== Calling Edge Function ===');
+    console.log('URL:', `${supabaseUrl}/functions/v1/deepseek-chat`);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/deepseek-chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+        'Authorization': `Bearer ${supabaseAnonKey}`
       },
       body: JSON.stringify({
         messages,
@@ -248,8 +254,13 @@ export const deepseekFetch = {
       })
     })
     
+    console.log('Response status:', response.status);
     const data = await response.json()
-    console.log('Direct fetch response:', data)
+    console.log('Direct fetch response:', JSON.stringify(data, null, 2))
+    
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP error ${response.status}`)
+    }
     
     if (!data.success) {
       throw new Error(data.error || 'API error')
